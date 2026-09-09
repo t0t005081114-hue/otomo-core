@@ -19,9 +19,10 @@ Product詳細仕様はここには記載しません。
 - Product Specification Owner: `otomo-lab` Repository
 - OTOMO CORE Adoption:
   - Migration Step 1 complete: `CLAUDE.md` recognizes OTOMO CORE as the upper shared foundation
+  - Migration Step 2 complete: common-vs-Product-specific audit recorded and OTOMO LAB-specific rules extracted to `harness/PRODUCT_RULES.md`
   - Existing local `docs/DEVELOPMENT_STANDARDS.md` / `docs/PHASE_WORKFLOW.md` remain as migration fallback
   - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
-  - Step 2 pending: audit common-vs-Product-specific content before reducing duplicated local harness rules
+  - Step 3 pending: reduce duplicated local harness documents after stable local CORE access and Product validation strategy are confirmed
 
 ### OTOMO塾
 
