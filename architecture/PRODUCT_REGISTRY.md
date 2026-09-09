@@ -20,9 +20,10 @@ Product詳細仕様はここには記載しません。
 - OTOMO CORE Adoption:
   - Migration Step 1 complete: `CLAUDE.md` recognizes OTOMO CORE as the upper shared foundation
   - Migration Step 2 complete: common-vs-Product-specific audit recorded and OTOMO LAB-specific rules extracted to `harness/PRODUCT_RULES.md`
-  - Existing local `docs/DEVELOPMENT_STANDARDS.md` / `docs/PHASE_WORKFLOW.md` remain as migration fallback
+  - Migration Step 3 complete: standard local sibling checkout confirmed; duplicated local shared documents reduced to Product-local shims
   - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
-  - Step 3 pending: reduce duplicated local harness documents after stable local CORE access and Product validation strategy are confirmed
+  - Product-specific validation commands will be added after the implementation stack is fixed
+  - Legacy local `sns-growth-os` is not the same Git repository as official `otomo-lab` and is outside automatic migration
 
 ### OTOMO塾
 
@@ -41,8 +42,8 @@ Product詳細仕様はここには記載しません。
   - Existing harness was the primary source used to derive OTOMO CORE v0.1
   - Migration Step 1 complete: `CLAUDE.md` recognizes OTOMO CORE as the upper shared foundation
   - Migration Step 2 complete: overlap audit recorded and Product-specific validation extracted to `harness/VALIDATION.md`
-  - Existing local `docs/DEVELOPMENT_STANDARDS.md` / `docs/PHASE_WORKFLOW.md` remain as migration fallback
-  - Step 3 pending: reduce local duplicated harness documents after stable local CORE access is confirmed
+  - Migration Step 3 complete: standard local sibling checkout confirmed; duplicated local shared documents reduced to Product-local shims
+  - Product requirements / formal specification / Decision-Failure history / Validation remain owned by `ai-teacher`
 
 NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-teacher`。Repository renameは本ファイルでは決定しない。
 
