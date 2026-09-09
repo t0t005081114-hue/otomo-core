@@ -17,7 +17,11 @@ Product詳細仕様はここには記載しません。
   - 市場との接点を作る
   - Product Experimentの入口になる
 - Product Specification Owner: `otomo-lab` Repository
-- OTOMO CORE Adoption: Migration pending
+- OTOMO CORE Adoption:
+  - Migration Step 1 complete: `CLAUDE.md` recognizes OTOMO CORE as the upper shared foundation
+  - Existing local `docs/DEVELOPMENT_STANDARDS.md` / `docs/PHASE_WORKFLOW.md` remain as migration fallback
+  - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
+  - Step 2 pending: audit common-vs-Product-specific content before reducing duplicated local harness rules
 
 ### OTOMO塾
 
