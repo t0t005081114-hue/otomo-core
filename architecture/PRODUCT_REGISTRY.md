@@ -33,8 +33,11 @@ Product詳細仕様はここには記載しません。
   - Learning Support
 - Product Specification Owner: `ai-teacher` Repository
 - OTOMO CORE Adoption:
-  - Existing harness is the primary source used to derive OTOMO CORE v0.1
-  - Migration pending
+  - Existing harness was the primary source used to derive OTOMO CORE v0.1
+  - Migration Step 1 complete: `CLAUDE.md` recognizes OTOMO CORE as the upper shared foundation
+  - Migration Step 2 complete: overlap audit recorded and Product-specific validation extracted to `harness/VALIDATION.md`
+  - Existing local `docs/DEVELOPMENT_STANDARDS.md` / `docs/PHASE_WORKFLOW.md` remain as migration fallback
+  - Step 3 pending: reduce local duplicated harness documents after stable local CORE access is confirmed
 
 NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-teacher`。Repository renameは本ファイルでは決定しない。
 
