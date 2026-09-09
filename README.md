@@ -52,6 +52,7 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 
 - `learning/FAILURE_SCHEMA.md`: Product側で重要な失敗を記録する共通形式
 - `learning/KNOWLEDGE_PROMOTION.md`: Product内の知識をOTOMO COREへ昇格させる条件と手順
+- `learning/PROMOTION_LOG.md`: 正式昇格したKnowledgeとHarness反映先の追跡履歴
 
 ## Core Principle
 
