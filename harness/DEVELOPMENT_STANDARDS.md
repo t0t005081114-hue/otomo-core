@@ -131,3 +131,36 @@ Phase完了を妨げない改善候補。必要に応じて将来対応する。
 AIはOTOMO COREの重要Ruleを自動確定・自動変更しない。
 
 改善候補を提示することはできるが、正式反映にはレビューと人間承認を必要とする。
+
+## 9. External Boundary Safety
+
+外部プロセス、外部API、外部Service等との境界では、外部から受け取る生の出力を安全な情報として扱わない。
+
+- 機密を含みうる生の標準エラー、URL query、response body、外部exception等を、そのままlog、exception、tracebackへ流さない
+- 後段のマスキングだけに依存せず、境界で安全な診断情報と機密を含みうる生出力を分離し、必要最小限へ縮約する
+- 外部エラーをRetryする前にtransient / permanentを分類する
+- Retry対象はtransientな失敗に限定し、permanentな失敗を一律に再試行しない
+
+安全な診断に不要な外部生出力は、観測経路へ渡さない。
+
+## 10. Explicit Invariants / Fail Fast
+
+正しさ、信頼度、分類、安全性、Business判断に関係する値のうち、仕様が明示的な判断を要求するものへ、単に「よく使う値だから」という理由で暗黙defaultを設定しない。
+
+- 必須の判断が未指定なら、境界で明示的に失敗させる
+- data / config invariantを境界で検証する
+- 既知のinvariant違反により安全または正しく処理できない場合、警告だけで続行しない
+- 無関係な後続処理で失敗させず、原因を特定できる位置でfail fastする
+
+## 11. Aggregation / Confidence Integrity
+
+件数、source数、vote数、event数、record数等を根拠にconfidence、trust、verification、importance等を格上げする場合、件数の多さだけをsemantic confidenceの根拠にしない。
+
+最低限、以下を確認する。
+
+1. 数えている実体がdistinctである
+2. duplicate IDやduplicate eventを除外している
+3. 同じgroup / cluster / themeに属することと、同じclaim / fact / decisionを裏付けることを区別している
+4. 集約単位より細かいsemantic relationが必要な場合、その対応関係を明示的に確認している
+
+集約結果を信頼度や検証状態へ変換する実装とレビューでは、重複排除と意味的な対応関係の両方を検証する。
