@@ -76,12 +76,20 @@ FAILには少なくとも1件のblocking findingが存在する。
 
 blocking findingがある場合:
 
-1. 原因を確認
-2. 修正
-3. 必要な回帰Test追加
-4. Validation再実行
-5. 再レビュー
-6. 必要ならFailure記録
+1. Root causeを確認する
+2. 同じRoot causeが影響しうる関連経路を列挙する
+   - sibling branch / case
+   - 共通関数の他の戻り値
+   - 同じ処理を使うcall site
+   - 類似するdata / error path
+3. 修正対象だけでなく、影響が確認された関連経路にも必要な修正を適用する
+4. 元のFailureに対する回帰Testを追加する
+5. 横展開対象となった関連経路にも、必要な回帰Testまたは明示的な非該当確認を追加する
+6. Validationを再実行する
+7. 独立再レビューを行う
+8. 必要ならFailureを記録する
+
+1つの分岐だけが直ったことを、Root cause全体の解消とみなさない。
 
 blockingが0になるまでPhase完了としない。
 
@@ -109,6 +117,7 @@ blockingが0になるまでPhase完了としない。
 - advisory残件
 - 重要Decision
 - Failure / 再発防止
+- 横展開確認の有無と対象
 - Knowledge昇格候補
 - commit hash
 - branch
