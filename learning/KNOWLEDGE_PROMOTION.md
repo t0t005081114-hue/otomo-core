@@ -49,6 +49,12 @@ Knowledge promotion candidate
 Human approval
 ↓
 OTOMO COREへ反映
+↓
+`learning/PROMOTION_LOG.md` へ昇格履歴を記録
+
+Product側のFailure原本は移動・削除しない。
+
+昇格後も、どのProductのどのFailureから生まれ、どのCORE Harnessへ反映されたかを追跡可能にする。
 
 ## 5. Promotion Destination
 
@@ -94,7 +100,26 @@ Checklist化
 
 ただし、仕組みが過剰になる場合は最小構成を優先する。
 
-## 7. Human Approval
+## 7. Promotion Record
+
+正式昇格したKnowledgeは `learning/PROMOTION_LOG.md` に記録する。
+
+最低記録項目:
+
+- Promotion ID
+- Date
+- Source Product / Repository
+- Source Failure / evidence commit
+- Generalized lesson
+- Enforcement method
+- Promotion destination
+- Approval / application status
+
+Promotion LogはProduct Failure logのコピーではない。
+
+COREへ昇格した知識とHarness変更の追跡索引として使用する。
+
+## 8. Human Approval
 
 AIは昇格候補を抽出・一般化・提案できる。
 
