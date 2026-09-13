@@ -22,7 +22,7 @@ Phase開始前:
 - 勝手なFeature追加をしない
 - 既存責務境界を理由なく変更しない
 - 必要なTestを追加する
-- 重要判断をGitHubへ残す
+- 重要判断をGitHubへ残す（該当する場合はImplementation Decision Traceを含む）
 
 ## 3. Validation
 
@@ -53,6 +53,8 @@ OTOMO COREは特定言語・Frameworkのコマンドを強制しない。
 
 実装後に独立レビューを行う。
 
+独立レビューは `harness/DEVELOPMENT_STANDARDS.md` の Clean-room Verification / Verification Evidence / Evidence Integrity に従う。
+
 確認項目:
 
 - requirement fidelity
@@ -64,6 +66,9 @@ OTOMO COREは特定言語・Frameworkのコマンドを強制しない。
 - test gaps
 - incorrect assumptions
 - responsibility boundary violation
+- clean-room reproducibility
+- hidden environment dependency
+- verification evidence integrity
 
 判定:
 
@@ -100,6 +105,7 @@ blockingが0になるまでPhase完了としない。
 - Acceptance Criteria達成
 - 必須Validation PASS
 - blocking finding = 0
+- 独立レビュー判定の根拠となるVerification Evidenceが存在する
 - 重要Decision記録済み
 - 重要Failure記録済み
 - Git working stateが理解可能
@@ -113,11 +119,20 @@ blockingが0になるまでPhase完了としない。
 - 変更ファイル
 - Validation結果
 - 独立レビュー結果
+- Independent Verification Environment（対象SHA、環境の分離方法、実装担当環境と共有したもの）
+- Verification Evidence（command、exit code、結果の安全な要約）
 - blocking残件
 - advisory残件
 - 重要Decision
+- Rejected Approaches
+- Deliberate Non-Goals
+- Residual Risks
 - Failure / 再発防止
 - 横展開確認の有無と対象
 - Knowledge昇格候補
 - commit hash
 - branch
+
+該当がない項目は `None` または一行の非該当理由でよい。形式を満たすための長文記入はしない。
+
+GitHubへ残す内容は `harness/DEVELOPMENT_STANDARDS.md` の Durable History / Evidence Integrity に従う。
