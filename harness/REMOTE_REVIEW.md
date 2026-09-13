@@ -225,6 +225,25 @@ VERDICT: PASS | FAIL
 - Finding fieldはProductのreview rule（OTOMO LAB `AGENTS.md` §6）に従う
 - VERDICT行が無い、複数で矛盾、PASSなのにBlockingあり、FAILなのにBlockingなし → `CODEX_FAILURE`（INCOMPLETE）
 
+### Verification Capability Principle（Draft / CORE昇格候補）
+
+2026-09-13のPilot local E2Eで、Codexが必要なtool（read-onlyコマンド）を使えない状態のまま、文章上は形式どおりの `VERDICT: PASS` を返した。原因は2種類あった（tool hostの欠落、Windows sandbox設定の欠落）。harnessはexit codeと出力形式だけを見ていたため、当初はreviewとして受け入れていた。Failure原本: `otomo-lab` の `docs/DECISIONS_AND_FAILURES.md`（`[2026-09-13 / Remote Review pilot] Codex returned a verdict without being able to run any tool` とそのaddendum）。
+
+ここから次の原則を導く。
+
+1. **自己申告はverification capabilityの証明にならない**: AI reviewerの「確認した」「PASS」という記述、exit code 0、出力形式の正しさは、そのreviewerが検証に必要な観測（fileを読む・commandを実行する）を実際に行えたことを証明しない
+2. **観測能力は外部から検証できる形で確認する**: reviewerが実際にtoolを使わなければ得られない値（harnessだけが知るnonce等）を課し、harness側で照合する。人手による事前確認（Setup Guideのsmoke test）も、reviewerの回答文ではなく実際のcommand出力で判定する
+3. **capabilityを確認できないreviewはPASSにしない**: 確認失敗・未確認はINCOMPLETEとし、verdictを採用しない。既知の原因を列挙したpattern検出だけに依存せず、原因が未知でも照合で拒否できる形にする
+4. **review resultとreview infrastructure healthを分離する**: 「対象が正しいか（Verification / Codex verdict）」と「reviewを成立させる基盤が健全か（Infrastructure）」を別の状態として記録・表示し、基盤の不健全を対象のPASS / FAILへ混ぜない
+
+Pilotでの実装範囲:
+
+- 原則2・3: `TOOL_CHECK` をreview実行中に課し、結果を採用する前にharnessが照合する。reviewとは別processで開始前にprobeするpreflightは未実装（将来候補）
+- 原則4: §8 の Verification / Codex / Infrastructure の状態とVERDICT表
+- 限界: `TOOL_CHECK` は「commandを実行できた」ことの証明であり、「必要なfileをすべて読んだ」ことの証明ではない（§16 Residual Risks）
+
+本原則は他のAI検証経路（CI上のAI review、Phase Independent Review等）にも適用できる可能性が高いため、`learning/KNOWLEDGE_PROMOTION.md` に従うCORE昇格候補とする。`harness/DEVELOPMENT_STANDARDS.md` と `learning/PROMOTION_LOG.md` への反映は、Independent ReviewとHuman承認の後に行う（本変更では行わない）。
+
 ## 10. Review Evidence
 
 原則: Evidenceをrepositoryへcommitしない。
@@ -404,6 +423,8 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | 単一のself-hosted jobでPR commentまで実行 | PRコード実行環境に `pull-requests: write` tokenが存在してしまう。GitHub-hosted jobへ分離した |
 | `pull_request_target` / `workflow_run` による実装 | fork PRのコードを特権文脈で扱う典型的な脆弱パターン。スマホからのon-demand起動にも合わない |
 | Codexにtest実行を判断させる | 決定論性・再現性を失う。harnessが事前に実行してEvidence化する |
+| Codexのexit code・出力形式・自己申告だけでreview成立とみなす | Pilot local E2Eで、toolを使えないCodexが形式どおりの `VERDICT: PASS` を返した。外部照合（`TOOL_CHECK`）を必須にした（§9 Verification Capability Principle） |
+| 既知のtool失敗メッセージのpattern検出だけで判定する | 1つ目の原因（tool host欠落）は検出できたが、2つ目の原因（sandbox policy）をすり抜けた。原因を列挙しない照合方式を採用 |
 | OTOMO COREに共通workflow templateを先に作る | COREの「先に抽象化しない」原則。Pilotで実証してから昇格する |
 | 実行時にotomo-coreからPromptを取得 | ref未固定ならdriftし、networkにも依存する。version header付きvendorと一致テストを採用 |
 | Public repository（OTOMO COMES）をPilotにする | 誰でもPRを作れるrepositoryに自宅PCのRunnerを接続しない |

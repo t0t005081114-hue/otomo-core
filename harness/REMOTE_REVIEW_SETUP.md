@@ -13,8 +13,8 @@ Claude Code / Codexでは完了できない手動設定をまとめる。Runner�
 | Repository | `t0t005081114-hue/otomo-lab`（private） |
 | Workflow | `.github/workflows/remote-review.yml` |
 | Runner labels | `self-hosted`, `windows`, `x64`, `otomo-review` |
-| Runner directory（推奨） | `C:\actions-runner\otomo-lab` |
-| Runner専用Windowsユーザー（推奨名） | `otomo-runner` |
+| Runner directory（推奨） | `C:\actions-runner\<repository>` |
+| Runner専用Windowsユーザー（推奨名） | `<runner-user>` |
 | Node.js | `package.json` の engines は `>=22.12.0`（Node.js 24 LTS推奨） |
 
 ## 1. GitHub: workflowをdefault branchへ入れる
@@ -32,9 +32,9 @@ Settings → Secrets and variables → Actions → **Variables** タブ → New 
 
 | Name | 必須 | 値の例 | 説明 |
 |---|---|---|---|
-| `REMOTE_REVIEW_ALLOWED_USERS` | 必須 | `["t0t005081114-hue"]` | `/review` を実行できるGitHub login（JSON配列）。未設定なら誰も起動できない |
+| `REMOTE_REVIEW_ALLOWED_USERS` | 必須 | `["<github-login>"]` | `/review` を実行できるGitHub login（JSON配列）。未設定なら誰も起動できない |
 | `REMOTE_REVIEW_RUNS_ON` | 任意 | `["self-hosted","windows","x64","otomo-review"]` | Runner labelを変える場合だけ設定 |
-| `REMOTE_REVIEW_CODEX_BIN` | 任意 | `C:\Users\otomo-runner\AppData\Roaming\npm\node_modules\@openai\codex\bin\codex.js` | Codex CLIを自動検出できない場合だけ設定（絶対path、`.exe` または `.js`。`.cmd` は不可） |
+| `REMOTE_REVIEW_CODEX_BIN` | 任意 | `C:\Users\<runner-user>\AppData\Roaming\npm\node_modules\@openai\codex\bin\codex.js` | Codex CLIを自動検出できない場合だけ設定（絶対path、`.exe` または `.js`。`.cmd` は不可） |
 | `REMOTE_REVIEW_CODEX_MODEL` | 任意 | （空） | Codexのmodelを固定したい場合だけ設定 |
 
 - 機密ではないので **Secrets ではなく Variables** に入れる
@@ -47,21 +47,21 @@ Settings → Secrets and variables → Actions → **Variables** タブ → New 
 管理者PowerShellで作成する:
 
 ```powershell
-net user otomo-runner * /add
+net user <runner-user> * /add
 ```
 
 - passwordは対話で入力する（password manager以外に保存しない）
 - Administratorsグループに追加しない
-- 一度 `otomo-runner` でWindowsへサインインしてprofileを作る（§4のCodex loginもこのユーザーで行う）
+- 一度 `<runner-user>` でWindowsへサインインしてprofileを作る（§4のCodex loginもこのユーザーで行う）
 - このユーザーに、Codex以外の認証情報（GitHub CLI、Git Credential Manager、SSH key、cloud CLI、ブラウザのlogin）を置かない
 
 ## 4. Windows: 必要なツール
 
-| ツール | install | `otomo-runner` で確認 |
+| ツール | install | `<runner-user>` で確認 |
 |---|---|---|
 | Node.js 24 LTS | 公式installer（全ユーザー向け） | `node -v` |
 | Git for Windows | 公式installer（全ユーザー向け） | `git --version` |
-| Codex CLI | `otomo-runner` でサインインして `npm install -g @openai/codex` | `codex --version` |
+| Codex CLI | `<runner-user>` でサインインして `npm install -g @openai/codex` | `codex --version` |
 
 長いpath対策（管理者PowerShell）:
 
@@ -69,7 +69,7 @@ net user otomo-runner * /add
 git config --system core.longpaths true
 ```
 
-Codex login（`otomo-runner` のセッションで）:
+Codex login（`<runner-user>` のセッションで）:
 
 ```powershell
 codex login              # ブラウザでChatGPTにlogin
@@ -77,7 +77,7 @@ codex login              # ブラウザでChatGPTにlogin
 codex login status       # "Logged in" を確認
 ```
 
-Codex smoke test（`otomo-runner` のセッションで。**Codexが実際にコマンドを実行できること**まで確認する）:
+Codex smoke test（`<runner-user>` のセッションで。**Codexが実際にコマンドを実行できること**まで確認する）:
 
 ```powershell
 mkdir $env:TEMP\codex-smoke
@@ -94,7 +94,7 @@ codex exec --sandbox read-only --ephemeral --ignore-user-config -c windows.sandb
 - Windows sandboxの初期設定を求められた場合は、このユーザーのセッションで完了させる
 
 - 未検証: Windows service（非対話セッション）から起動したときに、Codexのread-only sandboxが追加設定なしで動くか。§6の実行結果で確認する
-- Playwrightを使うProductだけ: `otomo-runner` で対象repoをcheckoutして `npx playwright install`（OTOMO LABは現時点で不要）
+- Playwrightを使うProductだけ: `<runner-user>` で対象repoをcheckoutして `npx playwright install`（OTOMO LABは現時点で不要）
 
 PCの電源設定: Runnerを使う間はスリープしない設定にする。
 
@@ -104,8 +104,8 @@ PCの電源設定: Runnerを使う間はスリープしない設定にする。
 2. 管理者PowerShellで、短いpathにフォルダを作る:
 
    ```powershell
-   mkdir C:\actions-runner\otomo-lab
-   cd C:\actions-runner\otomo-lab
+   mkdir C:\actions-runner\<repository>
+   cd C:\actions-runner\<repository>
    ```
 
 3. GitHub画面の **Download** 欄のコマンド（`Invoke-WebRequest`、hash確認、展開）をそのまま実行する
@@ -114,11 +114,11 @@ PCの電源設定: Runnerを使う間はスリープしない設定にする。
    | 質問 | 入力 |
    |---|---|
    | runner group | Enter（Default） |
-   | runner name | 例 `home-pc-otomo-lab` |
+   | runner name | 任意（個人名・PC名を含めない名前） |
    | additional labels | `otomo-review` |
    | work folder | Enter（`_work`） |
    | run as service | `Y` |
-   | service account | `.\otomo-runner` と、そのpassword |
+   | service account | `.\<runner-user>` と、そのpassword |
 
    - tokenは短時間で失効する一時tokenだが、保存しない
    - `self-hosted` / `Windows` / `X64` のlabelは自動で付く（labelの大文字小文字は区別されない）
@@ -174,7 +174,7 @@ Restart-Service "actions.runner.*"
 | runはあるが `Authorize /review` が skipped | `REMOTE_REVIEW_ALLOWED_USERS` 未設定・loginが含まれない | §2 |
 | workflow run自体がエラー | variableのJSONが不正 | 値を修正する |
 | `Verify and review (self-hosted)` が Queued のまま | Runner offline、label不一致、PCスリープ | Runners画面で Idle を確認、`REMOTE_REVIEW_RUNS_ON` を確認 |
-| INCOMPLETE + `AUTHENTICATION_FAILURE` | Codex loginの期限切れ | `otomo-runner` で `codex login` |
+| INCOMPLETE + `AUTHENTICATION_FAILURE` | Codex loginの期限切れ | `<runner-user>` で `codex login` |
 | INCOMPLETE + `Codex CLI was not found` | serviceから `codex` が見えない | `REMOTE_REVIEW_CODEX_BIN` を設定、service再起動 |
 | Install が INFRA_ERROR（EPERM / EBUSY） | antivirusのスキャン、前回processの残留 | 再度 `/review`、service再起動 |
 | Install が INFRA_ERROR（network） | npm registryに届かない | 再度 `/review` |
@@ -187,8 +187,8 @@ Restart-Service "actions.runner.*"
 ## 8. 停止・削除
 
 - 一時停止: `Stop-Service "actions.runner.*"`
-- 削除: Runners画面 → 対象Runner → Remove で表示される `./config.cmd remove --token ...` を実行し、`C:\actions-runner\otomo-lab` を削除する
-- 侵害が疑われる場合: service停止 → Runner削除 → ChatGPT側で該当ログインのsessionを確認 → `otomo-runner` ユーザーをprofileごと削除して作り直す
+- 削除: Runners画面 → 対象Runner → Remove で表示される `./config.cmd remove --token ...` を実行し、`C:\actions-runner\<repository>` を削除する
+- 侵害が疑われる場合: service停止 → Runner削除 → ChatGPT側で該当ログインのsessionを確認 → `<runner-user>` ユーザーをprofileごと削除して作り直す
 
 ## 9. Cost note
 

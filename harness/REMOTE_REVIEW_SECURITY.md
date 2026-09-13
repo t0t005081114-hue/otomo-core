@@ -63,7 +63,7 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 - そのユーザーのprofileに、Codex以外の認証情報（Git Credential Manager、`gh`、cloud CLI、SSH key、ブラウザprofile、token入り `.npmrc` 等）を置かない
 - 普段使いユーザーのファイルへアクセスさせない（既定のNTFS権限を維持する）
 - Codexはそのユーザーで個別にloginする
-- workspaceは短いpathに置く（例 `C:\actions-runner\otomo-lab\_work`）
+- workspaceは短いpathに置く（例 `C:\actions-runner\<repository>\_work`）
 
 将来候補（Deliberate Non-Goal）: VM / Windows Sandbox / WSL2 / container / ephemeral runner、GitHub Actionsの SHA pin、egress制限、Environment protection rules。
 
@@ -83,7 +83,7 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 | Risk | 内容 | 現状の緩和 | 残る理由 |
 |---|---|---|---|
 | Runnerの永続汚染 | PRの install / build がRunnerユーザー権限で任意コードを実行し、user-levelの git / npm / Codex 設定等を改変して次回以降に影響する | 専用ユーザー、workspace削除、allowlist、fork拒否 | 永続Runnerでは完全に防げない。ephemeral化が必要 |
-| Codex認証情報の窃取 | 同上の任意コードが `~/.codex` を読める | 専用ユーザー、Operator Rule 1 | CodexとPRコードが同一ユーザーで動く |
+| Codex認証情報の窃取 | 同上の任意コードが、Runnerユーザーのprofile内にあるCodex認証情報を読める | 専用ユーザー、Operator Rule 1 | CodexとPRコードが同一ユーザーで動く |
 | Evidence偽装 | 同上の任意コードが、実行中のharnessやevidence fileを改ざんする | trusted inputを事前にメモリへ読み込む、reportで整合を検証 | 同一ユーザー内での改ざんは検知しきれない |
 | Local machine compromise | PC自体の侵害 | OS更新、専用ユーザー | 本仕組みの範囲外 |
 | Prompt injection | 監査の見逃しを誘導される | untrusted区切り、Promptの優先順位、Deterministic Verificationとの併用 | LLMの性質上ゼロにできない |
