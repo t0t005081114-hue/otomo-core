@@ -70,7 +70,7 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 - Codexはそのユーザーで個別にloginする
 - workspaceは短いpathに置く（例 `C:\actions-runner\<repository>\_work`）
 
-将来候補（Deliberate Non-Goal）: VM / Windows Sandbox / WSL2 / container / ephemeral runner、GitHub Actionsの SHA pin、egress制限、Environment protection rules。
+将来候補（Deliberate Non-Goal）: VM / Windows Sandbox / WSL2 / container / ephemeral runner、egress制限、Environment protection rules。
 
 ## 4. Operator Rules
 
@@ -101,3 +101,4 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Human承認前）
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Modelを明記し、malicious PR isolation等がExplicit Non-Goalであることを追記。allowlist責務がtrusted scriptに一本化されたことをSEC-01に反映。SEC-19〜SEC-21（Actions SHA pin、Stale Review Protection、Required Context Documents）を追加。Residual RisksとOperator Rulesを更新
+- 2026-09-14 文書ドリフト修正（Codex再レビュー前）: §3 Runner環境の将来候補からGitHub Actions SHA pinを削除（SEC-19で実装済みのため重複記述だった）

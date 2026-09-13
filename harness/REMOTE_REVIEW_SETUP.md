@@ -38,7 +38,7 @@ Settings → Secrets and variables → Actions → **Variables** タブ → New 
 | `REMOTE_REVIEW_CODEX_MODEL` | 任意 | （空） | Codexのmodelを固定したい場合だけ設定 |
 
 - 機密ではないので **Secrets ではなく Variables** に入れる
-- JSONが不正だと、PRへのコメントのたびにworkflowがエラーになる
+- JSONが不正な場合、workflow自体はエラーにならない。trusted `authorize.mjs` が `ALLOWLIST_INVALID` として fail closed し、Self-hosted review jobへは到達しない（`harness/REMOTE_REVIEW.md` §5）
 
 ## 3. Windows: Runner専用ユーザー
 
@@ -172,7 +172,7 @@ Restart-Service "actions.runner.*"
 |---|---|---|
 | `/review` してもrunが出ない | workflowがmainに無い | §1 |
 | runはあるが `Authorize /review` が skipped | `REMOTE_REVIEW_ALLOWED_USERS` 未設定・loginが含まれない | §2 |
-| workflow run自体がエラー | variableのJSONが不正 | 値を修正する |
+| `Authorize request and resolve PR` step に `::error::` ログが出るが、run自体は失敗せず、PRには何も投稿されない | `REMOTE_REVIEW_ALLOWED_USERS` のJSONが不正（`authorize.mjs` が `ALLOWLIST_INVALID` としてfail closedし、Self-hosted review jobへは到達しない） | §2の値を修正する |
 | `Verify and review (self-hosted)` が Queued のまま | Runner offline、label不一致、PCスリープ | Runners画面で Idle を確認、`REMOTE_REVIEW_RUNS_ON` を確認 |
 | INCOMPLETE + `AUTHENTICATION_FAILURE` | Codex loginの期限切れ | `<runner-user>` で `codex login` |
 | INCOMPLETE + `Codex CLI was not found` | serviceから `codex` が見えない | `REMOTE_REVIEW_CODEX_BIN` を設定、service再起動 |
@@ -199,3 +199,4 @@ Restart-Service "actions.runner.*"
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成
 - 2026-09-13 v0.1 Draft, Independent Review remediation: smoke testをstdin経由・`--ignore-rules`・`approval_policy=never` 付きに更新し本番呼び出しへ近づけた。Runner Acceptance Gate（§20）への参照とAT-18のcancellation residual riskの注記を追加
+- 2026-09-14 文書ドリフト修正（Codex再レビュー前）: `REMOTE_REVIEW_ALLOWED_USERS` のJSONが不正な場合の説明を現在の実装（`authorize.mjs` がALLOWLIST_INVALIDとしてfail closedし、workflow run自体はエラーにならない）へ修正。§2とTroubleshootingを整合させた
