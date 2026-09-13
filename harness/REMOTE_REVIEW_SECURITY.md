@@ -55,8 +55,9 @@ Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎
 | SEC-17 | commit / push / merge / auto-fix の経路を持たない | 静的テスト（AT-16 / AT-19 / AT-20） |
 | SEC-18 | Artifactの保存期間は短期（Evidence 14日、PR context 7日） | workflow |
 | SEC-19 | 使用する第三者GitHub Actionsはfull commit SHAへpinし、major tag参照にしない | workflow静的テスト（AT-23） |
-| SEC-20 | reportがPRへコメントを投稿する直前に、GitHub APIからcurrent PR HEAD SHAを再取得し、reviewしたSHAと異なる場合は投稿するVERDICTをINCOMPLETEに強制する（stale review protection） | `report.mjs` + unit test（AT-22） |
+| SEC-20 | reportがPRへコメントを投稿する直前に、GitHub APIからcurrent PR HEAD SHAを再取得し、reviewしたSHAと異なる場合は投稿するVERDICTをINCOMPLETEに強制する（stale review protection）。取得したSHAが欠落・不正な場合も「一致」とfail-openせず、同様にINCOMPLETEに強制する（2026-09-14追加。GET/POST間のTOCTOUはResidual Risk） | `report.mjs` + unit test（AT-22） |
 | SEC-21 | `codex.context_documents` の `required: true` documentが、authorized head SHAのcheckout内で存在・読取可能・非空であることを、Codex起動前にharnessが確認する。満たさない場合はVERDICTをPASSにしない | `lib/context-documents.mjs` + unit test（AT-21） |
+| SEC-22 | report jobは、自身が独立にcheckoutしたtrusted `codex.context_documents` manifestと、Evidenceの `context_documents[]` を照合する。`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあれば、Evidenceの自己申告verdictを採用せずINCOMPLETEとする（2026-09-14追加、CORE-RR-IR-002） | `lib/context-documents.mjs`（`validateContextDocumentManifest`）+ `report.mjs` + unit test（AT-25） |
 
 Controlを弱める変更（例: `contents: write` の追加、fork PRの許可、shell実行の導入）は、本Policyの改訂とHuman承認を先に行う。
 
@@ -96,9 +97,12 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 | Supply chain（GitHub Actionsのリリース内容） | pin先のfull commit SHAが指すコード自体が、将来のリリースで悪意ある変更を含む可能性 | GitHub公式actionのみ使用、full commit SHAへpin（pin時に内容を確認） | pinはSHAの指す内容を固定するだけで、そのSHA自体の安全性を継続監査しない |
 | Concurrency groupがallowlist非依存 | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる（`REMOTE_REVIEW.md` §13） | 実行済みreviewの喪失・再実行の手間。unauthorized runがrunnerへ到達することはない | private repositoryのcollaborator数を絞る運用 |
 | Required Context Documentsの確認範囲 | 「checkout内にfileとして存在し読めるか」だけを確認し、「Codexが実際に読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する |
+| Stale Review Protectionの GET/POST TOCTOU（2026-09-14追加） | report jobが現在のHEAD SHAを確認した直後から、PRコメントをPOSTするまでの間に新しいcommitがpushされる | 投稿されたコメントの「一致」判定は投稿直前の一時点のもの | GitHub REST APIにcompare-and-swapに相当する原子的操作が無い。人間はreviewed SHAを見て必要なら再度 `/review` する |
+| Context Documents Manifest Cross-Checkの確認範囲（2026-09-14追加） | report jobはtrusted manifestとEvidenceの `context_documents[]` の整合だけを確認する。「trusted manifestに載っている文書がProductの実際のSource of Truthとして正しいか」自体はharnessが判断しない | AGENTS.md等のProduct定義とconfig.jsonのmanifestが（人間のミスにより）両方とも同じ誤りで揃っている場合、この照合では検出できない | `harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistencyに基づく人間・Independent Reviewでの確認 |
 
 ## Change History
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Human承認前）
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Modelを明記し、malicious PR isolation等がExplicit Non-Goalであることを追記。allowlist責務がtrusted scriptに一本化されたことをSEC-01に反映。SEC-19〜SEC-21（Actions SHA pin、Stale Review Protection、Required Context Documents）を追加。Residual RisksとOperator Rulesを更新
 - 2026-09-14 文書ドリフト修正（Codex再レビュー前）: §3 Runner環境の将来候補からGitHub Actions SHA pinを削除（SEC-19で実装済みのため重複記述だった）
+- 2026-09-14 Independent Re-review remediation（CORE-RR-IR-002未解決分）: SEC-20にhead SHA取得不能時のfail-open除去を追記、SEC-22（Context Documents Manifest Cross-Check）を追加。Residual RisksにGET/POST TOCTOUとManifest Cross-Checkの確認範囲を追加

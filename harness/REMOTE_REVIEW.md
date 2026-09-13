@@ -262,6 +262,31 @@ harnessはCodex起動前に、trusted checkout（authorized head SHAへexact che
 
 この確認は「checkout時点でfileが存在し読めた」ことの確認であり、「Codexが実際にそのfileを読んだ」ことの証明ではない（次項参照）。
 
+### Source of Truth Manifest Consistency（2026-09-14 Independent Re-review remediation、CORE-RR-IR-002）
+
+上記の`required: true`presence checkは、`codex.context_documents`に**実際に列挙されているentry**についてしかfail-closedにならない。Productが「レビュー前に読むべき」と定義したSource of Truth文書（Product `AGENTS.md` §2等）が、そもそもこのmanifestへ追加されなかった場合、または`required: true`から`required: false`へ静かに格下げされた場合は、presence checkの対象自体が存在しないため検出できず、Evidence上は自己整合的なまま`VERDICT: PASS`に到達しうる。これがCORE-RR-IR-002の指摘した欠落である。
+
+これを閉じるため、次を恒久的な運用規則とする。
+
+- Product `AGENTS.md`（またはこれに相当するReview entrypoint文書）が「レビュー前に読むべき」と定義したfile-backedなSource of Truthは、`scripts/remote-review/config.json`の`codex.context_documents`に`required: true`として存在しなければならない
+- `context_documents`の`required`をtrueからfalseへ変更する、またはmanifestからentryを削除するのは、Product側の「読むべきSource of Truth」定義（`AGENTS.md`等）を同じ変更の中で先に、または同時に書き換えてからにする。manifest側だけを単独で緩めない
+- Productはこの一致を回帰テストで検証する（例: `otomo-lab` `scripts/remote-review/test/harness.test.mjs`、Product `AGENTS.md`の一覧とconfig.jsonの`codex.context_documents`を照合するテスト）
+- どのProduct文書が「レビュー前に読むべき」かの判断自体は、既存Harness（本書・Product `AGENTS.md`・`docs/DEVELOPMENT_STANDARDS.md`等）とProduct固有ルールから行う。本書はmanifestとProduct定義を一致させることだけを要求し、どの文書が必須かをCORE側で決定しない
+
+### Context Documents Manifest Cross-Check（report job、2026-09-14 Independent Re-review remediation、CORE-RR-IR-002）
+
+review jobの`CONTEXT_FAILURE`判定（上記）は、review job自身が信頼したconfig（trusted checkoutの`codex.context_documents`）に基づいて生成されたEvidence（`metadata.json`の`context_documents[]`）を前提にしている。しかし、Evidenceは自己申告であり、report jobがそれをそのまま信用してはならない（DEVELOPMENT_STANDARDS §5 Evidence Integrity）。
+
+report jobはreview jobとは別のGitHub-hosted checkoutで、review jobが信頼したのと同じtrusted commit（`ref: github.sha`）を独立にcheckoutする。report jobはこのtrusted checkoutから`scripts/remote-review/config.json`を自分でも読み込み、Evidenceの`context_documents[]`をこのtrusted manifestに対して照合する。次のいずれかがあれば、Evidenceの`verdict`をそのまま採用せず、PASS/FAILとしてPRへ投稿しない（INCOMPLETE、§8）。
+
+- `context_documents`が`null`（trusted manifestが空でない場合）
+- trusted manifestにあるentryがEvidence側に存在しない（path一致するentryが無い）
+- 同一pathのentryで`required`フラグがtrusted manifestと一致しない
+- trusted manifestで`required: true`のentryが、Evidence側で`PRESENT`以外のstatusになっている
+- Evidence側にtrusted manifestに存在しないpathのentryがある、またはEvidence側で同一pathが重複している
+
+この照合はreview job側のpresence check（fileが実際に存在し読めたか）を置き換えない。両方が独立に成立して初めて、required context documentが「manifestにも列挙され」かつ「checkout時点で読めた」ことになる。
+
 ### TOOL_CHECK Responsibility（境界の明確化）
 
 `TOOL_CHECK`（grounding check）が証明するのは「Codexがこのcheckoutに対してread-onlyコマンドを実行できた」ことだけである。次のいずれも証明しない。
@@ -278,6 +303,8 @@ harnessはCodex起動前に、trusted checkout（authorized head SHAへexact che
 Evidenceに次を記録する（§10 Schema）。取得できない項目は `UNKNOWN` 等の明示値とし、推測しない。
 
 `requested_model` / `resolved_model`（Codex CLIは実際に解決したmodel名を返さないため常に `UNKNOWN`）/ `reasoning_effort`（harnessは指定していないため `UNKNOWN`）/ `approval_policy` / `ignore_user_config` / `ignore_rules` / `effective_sandbox`（read-only、Windowsでは `windows.sandbox` 設定を含む）/ `prompt_version` / `prompt_hash`（実際にstdinへ渡したprompt全体のSHA-256）。
+
+**report側検証（2026-09-14 Independent Re-review remediation）**: `codex.status` が `COMPLETED` のEvidenceについて、report jobは上記provenance fieldの存在・型を検証する（`prompt_hash` はSHA-256 hex、64桁の16進文字列であることを検証する）。`resolved_model` / `reasoning_effort` が仕様上常に `"UNKNOWN"` になることは、この検証と矛盾しない——`"UNKNOWN"` は有効な文字列値として受理され、欠落や型不一致とは区別する。検証に失敗した場合はEvidence全体を採用せず、INCOMPLETEとして扱う（§10 report jobのEvidence検証）。
 
 ### Prompt Template
 
@@ -334,7 +361,7 @@ Pilotでの実装範囲:
 
 | Artifact file | 内容 |
 |---|---|
-| `metadata.json` | 機械可読Evidence（Schema 1.0） |
+| `metadata.json` | 機械可読Evidence（Schema 1.1） |
 | `review-evidence.md` | 人間向けEvidence全体 |
 | `<check-id>.log` | 各checkのcommand・時刻・exit code・stdout / stderr（redaction済み）。例 `install.log`, `lint.log`, `typecheck.log`, `build.log` |
 | `codex-prompt.md` | Codexへ渡したPrompt（redaction済み） |
@@ -397,8 +424,11 @@ report jobは、PRコメントを投稿する直前にGitHub APIから現在のP
 
 - 一致: 通常どおり投稿する
 - 不一致: 投稿するVERDICTを `INCOMPLETE` に強制する（元のverdictはPASS/FAILであっても、current HEADに対する有効な結果として提示しない）。コメントに reviewed SHA・current SHA・staleである旨を明示する
+- **取得不能（2026-09-14 Independent Re-review remediation、Advisory）**: GitHub APIの応答に`head.sha`が欠落している、または40桁hexとして不正な場合、「reviewしたSHAと一致した」ものとしてfail-openしてはならない。この場合も投稿するVERDICTを`INCOMPLETE`に強制する（reason: head SHA未確認）。「一致しない」と確定できたstaleケースと、「一致するかどうか確認できない」ケースは別の条件だが、いずれもPASS/FAILをそのまま投稿しない点で扱いは同じ
 
-`metadata.json`（Artifact）自体は書き換えない。stale判定はreport job（PR投稿の直前）だけの責務であり、Evidence Schemaへ新しいverdict値は追加しない。
+`metadata.json`（Artifact）自体は書き換えない。stale判定・head SHA未確認判定はいずれもreport job（PR投稿の直前）だけの責務であり、Evidence Schemaへ新しいverdict値は追加しない。
+
+**Residual Risk（TOCTOU、2026-09-14 Independent Re-review remediation）**: 上記の再取得（GET）とPRコメント投稿（POST）はatomicではない。この2つのAPI呼び出しの間に新しいcommitがPRへpushされる可能性は残り、GitHub REST APIのissue commentにはcompare-and-swapに相当する原子的操作がない。この窓は本Pilotでは埋めない（許容するResidual Risk、§16）。人間は投稿されたコメントのreviewed SHAを確認し、必要なら再度 `/review` する。
 
 ### Durable History Boundary（Advisory）
 
@@ -521,6 +551,7 @@ concurrency groupの計算はworkflow式（`fromJSON` によるallowlist評価�
 | AT-22 | review実行中にPRへ新しいcommitが増えた場合、古いSHAへの結果をcurrent HEADのPASS/FAILとして投稿しない（stale → INCOMPLETE） | unit test（renderPrComment stale）。GitHub上での実地確認は未検証（Runner登録後） |
 | AT-23 | 使用する third-party GitHub Actions が full commit SHA へpinされている | 静的テスト（`uses:` が40桁hexであることを検査） |
 | AT-24 | `/review` は小文字のみ有効（`/Review` 等は無効）。allowlist変数が不正なJSONでもfail closed（Runnerへ到達しない） | unit test |
+| AT-25 | report jobは、trusted `codex.context_documents` manifestとEvidenceの `context_documents[]` を照合し、`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあればINCOMPLETEとする（Codexの自己申告verdictがPASSであっても採用しない） | unit test（`validateContextDocumentManifest` + report jobのfallback経路） |
 
 Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。
 
@@ -586,6 +617,7 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | Concurrency groupがallowlist非依存（§13） | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる | 実行済みreviewの喪失・再実行の手間（unauthorized runがrunnerへ到達することはない） | private repositoryのcollaborator数を絞る運用、必要なら将来requester単位のgroup分割を検討 |
 | Required Context Documentsの範囲 | harnessが確認するのは「checkout内にfileとして存在し読めるか」だけで、「Codexが実際にそのfileを読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する（TOOL_CHECK Responsibilityと同じ限界） |
 | Stale Review Protectionの再取得失敗 | report jobがcurrent HEAD再取得に失敗した場合、その失敗はGitHub API呼び出し全体の失敗として扱われ（job failure）、コメント自体が投稿されない | 結果が全く投稿されない（誤ったPASSが投稿されるより安全側だが、Runner実行の無駄） | workflow runのfailureとして人間が気づく。必要なら再度 `/review` |
+| Stale Review Protectionの GET/POST TOCTOU（2026-09-14追加） | report jobが現在のHEAD SHAをGETで確認した直後から、PRコメントをPOSTするまでの間に新しいcommitがpushされる | 投稿されたコメントの「一致」判定は投稿直前の一時点のものであり、投稿完了までの間に発生した新しいpushはそのコメントに反映されない | 人間はコメントのreviewed SHAとPRの実際のHEADを見て判断し、必要なら再度 `/review` する。この窓を埋める原子的なGitHub API操作は無い |
 
 Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 
@@ -643,3 +675,4 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Independent Review・Human承認前）
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Model / Non-Goals / Operator Gateを明記（CORE-RR-IR-001）、Required / Optional Context Documentsと`CONTEXT_FAILURE`を追加（CORE-RR-IR-002）、Stale Review Protection、GitHub Actions SHA pinning、`/review` の大文字小文字判定とallowlist責務の明確化、Model / Prompt Provenance、Durable History Boundary、Draft/Formal Promotion Boundary、Cancellation / Queued Comment Behaviorを追加。Evidence Schemaを1.0から1.1へ
+- 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002未解決分の再remediation）: `required: true`presence checkだけでは、Productが必須と定義するSource of Truthがそもそも`codex.context_documents` manifestから漏れること自体を防げない、という残存Blockingを解消。Source of Truth Manifest Consistency原則（本書§9）と、report jobによるtrusted manifest ↔ Evidence `context_documents[]`のcross-check（`null`・entry欠落・required flag不一致・非PRESENT required entry・重複/想定外entryをすべてINCOMPLETEへ倒す、AT-25）を追加。Advisory 3件を解消: (1) report jobの現在HEAD SHA取得が欠落・不正な場合のfail-open除去（GET/POST間のTOCTOUはResidual Riskとして明記）、(2) `COMPLETED` EvidenceのModel / Prompt Provenance field（存在・型・`prompt_hash`のSHA-256形式）をreport側で検証、(3) `metadata.json`の`Schema 1.0`表記を`Schema 1.1`へ修正（§10、`evidence.mjs`）。Pilot実装（`otomo-lab`）のtest suiteを58から66へ拡張
