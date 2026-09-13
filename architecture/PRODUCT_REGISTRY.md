@@ -24,6 +24,7 @@ Product詳細仕様はここには記載しません。
   - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
   - Product-specific validation commands will be added after the implementation stack is fixed
   - Legacy local `sns-growth-os` is not the same Git repository as official `otomo-lab` and is outside automatic migration
+  - Remote Review pilot (Draft, 2026-09-13): `.github/workflows/remote-review.yml` + `scripts/remote-review/` — see `harness/REMOTE_REVIEW.md`
 
 ### OTOMO塾
 
