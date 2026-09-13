@@ -77,13 +77,13 @@ codex login              # ブラウザでChatGPTにlogin
 codex login status       # "Logged in" を確認
 ```
 
-Codex smoke test（`<runner-user>` のセッションで。**Codexが実際にコマンドを実行できること**まで確認する）:
+Codex smoke test（`<runner-user>` のセッションで。**Codexが実際にコマンドを実行できること**まで確認する。本番の呼び出し（`lib/codex.mjs` の `buildCodexArgs`）に近づけるため、promptはCLI引数ではなくstdinで渡し、`--ignore-rules` と `approval_policy="never"` も付ける）:
 
 ```powershell
 mkdir $env:TEMP\codex-smoke
 cd $env:TEMP\codex-smoke
 git init
-codex exec --sandbox read-only --ephemeral --ignore-user-config -c windows.sandbox=elevated "Run the command: git --version. Reply with its exact output only."
+"Run the command: git --version. Reply with its exact output only." | codex exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules -c windows.sandbox=elevated -c approval_policy="never" -
 ```
 
 - `blocked by policy` と表示される場合は、Codexのread-only sandboxがコマンドを実行できていない。`-c windows.sandbox=elevated` を付けているか確認し、このユーザーの対話セッションでWindows sandboxの初期設定を完了させる（未検証: Runner専用ユーザーで初期設定が求められるかどうかと、その手順）
@@ -139,7 +139,7 @@ Restart-Service "actions.runner.*"
 
 ## 6. 動作確認（Acceptance Tests）
 
-`harness/REMOTE_REVIEW.md` §15 のうち、GitHub上でしか確認できない項目を実施する。
+`harness/REMOTE_REVIEW.md` §15 のうち、GitHub上でしか確認できない項目を実施する。§20 Runner Acceptance Gate（Codex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・non-interactive動作・Evidence生成）が成立することを、以下のAT-02実行時に確認する。
 
 1. 確認用PRを作る（mergeしない小さな変更）
 2. **AT-01**: PRに `LGTM` とコメント → Actionsの Remote Review run で `Authorize /review` が skipped、PRには何も投稿されない
@@ -161,7 +161,7 @@ Restart-Service "actions.runner.*"
 5. **AT-03**: Issueに `/review` とコメント → run が skipped
 6. **AT-04**: allowlist外のアカウント（あれば）で `/review` → skipped。第2アカウントが無い場合は「未検証（unit testのみ）」と記録する
 7. **AT-14**: variable `REMOTE_REVIEW_CODEX_BIN` を一時的に `C:\missing\codex.exe` にして `/review` → `VERDICT: INCOMPLETE` / Infrastructure `FAILED` → variableを削除して元に戻す
-8. **AT-18**: `/review` を続けて2回投稿 → 古いrunが cancelled になり、新しいrunだけが結果をコメントする
+8. **AT-18**: `/review` を続けて2回投稿 → 古いrunが cancelled になり、新しいrunだけが結果をコメントする（allowlist外のユーザーの `/review` らしきコメントでも同じcancelが起きうる。`harness/REMOTE_REVIEW.md` §13 Residual Risk）
 9. **AT-16 / AT-19 / AT-20**: PRと `main` にcommitが増えていない、PRがmergeされていないことを確認する
 10. **AT-17**: Artifactの中身を `ghp_`、`ghs_`、`github_pat_`、`sk-`、`Bearer`、`password` で検索し、秘密値が無いことを確認する
 11. 結果をProduct側に記録する（記録するかどうか・どこに残すかは人間判断）
@@ -198,3 +198,4 @@ Restart-Service "actions.runner.*"
 ## Change History
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成
+- 2026-09-13 v0.1 Draft, Independent Review remediation: smoke testをstdin経由・`--ignore-rules`・`approval_policy=never` 付きに更新し本番呼び出しへ近づけた。Runner Acceptance Gate（§20）への参照とAT-18のcancellation residual riskの注記を追加

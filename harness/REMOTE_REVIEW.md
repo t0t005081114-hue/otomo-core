@@ -19,6 +19,43 @@ ChatGPT → Claude Code → GitHub PR → (スマホ) /review → 自宅PC Self-
 → Deterministic Verification → Codex Independent Review → Evidence → GitHub PR → 人間判断
 ```
 
+### Supported Trust Model（2026-09-13 Independent Review remediation）
+
+Remote Review v0.1が安全に対象とするのは、
+
+**「private repositoryにおいて、人間が事前に確認し、自宅PCのSelf-hosted Runner上で実行してよいと判断したPR」**
+
+だけである。「信頼済み」の対象には、PRのsource codeそのものだけでなく、以下もすべて含まれる。
+
+- `package.json` / lockfile、依存の追加・更新
+- npm lifecycle script（`preinstall` / `postinstall` 等）、install script、build script、test script
+- Playwright等、install / build / verification中に実行されるruntime code
+
+つまり「PR作者を信頼している」だけでは足りない。「このPRが導入・変更するcodeとdependency chainを、自宅PCのSelf-hosted Runner上で実行するリスクを、人間が受容している」ことが前提になる。
+
+### Operator Gate
+
+`/review` を投稿する前に、人間が次を確認し、「このコードを自宅PCのRunner上で実行してよい」と判断すること（`harness/REMOTE_REVIEW_SECURITY.md` §4 Operator Rulesにも記載）。
+
+- PRの作者・由来
+- 変更されたcode
+- `package.json` / lockfileの変更
+- install / build / testで実行されるscript
+- 依存の追加・更新
+
+### Explicit Non-Goals（Security Claimの範囲）
+
+Remote Review v0.1は、次を提供しない。明示的なNon-Goalであり、実装できていないことを隠さない。
+
+- malicious PRのisolation
+- hostile dependencyのsandbox化
+- supply-chain compromiseのisolation
+- 未知・信頼していない第三者PRの安全な実行
+- secure multi-tenant execution
+- Codex認証とEvidence生成者の権限分離（Residual Risk。§16参照）
+
+これらを安全に扱えるかのように読める記述が他の文書にあれば誤りである。Future Hardening（ephemeral runner、disposable VM、Codex専用security principal、network isolation等）は§16 Deliberate Non-Goalsに列挙し、今回は実装しない。
+
 ## 2. 既存Harnessとの関係
 
 Remote Reviewは新しいReview原則ではなく、既存原則の**実行経路**である。以下を置き換えない。
@@ -83,10 +120,12 @@ PR comment "/review ..."
 
 1. `issue_comment` の `created`（`edited` は対象外）
 2. コメント対象がPR（`issue.pull_request` が存在）。Issueでは起動しない
-3. コメント本文が `/review` で始まる（大文字小文字は区別しない。`/reviewer` は対象外）
+3. コメント本文が `/review`（小文字、大文字小文字を区別する）で始まる。`/reviewer` は対象外
 4. 投稿者が `type: User` かつ allowlist（repository variable `REMOTE_REVIEW_ALLOWED_USERS`）に含まれる
 5. `author_association` が `OWNER` / `MEMBER` / `COLLABORATOR`
 6. PRがopen、head repositoryがbase repositoryと同一（fork PR拒否）、SHAが40桁hex
+
+認可の責務分担（2026-09-13追記）: GitHub Actionsの式関数（`startsWith()` / `contains()`）は常に大文字小文字を区別しない仕様であり、workflow式の側でcase-sensitiveな判定はできない。そのためworkflow側の `if:` とconcurrency groupの条件は「PRコメントで `/review` らしき文字列である」ことだけを見るcostの事前filterであり、認可境界ではない。allowlist（`REMOTE_REVIEW_ALLOWED_USERS`）のparse・比較、大文字小文字を区別する `/review` 判定、`author_association` の確認は、すべてtrusted script（`authorize.mjs`）内で行う。allowlist変数が不正なJSONであっても、workflow式の評価自体を壊さず、`authorized: false` と理由（`ALLOWLIST_INVALID`）を記録して閉じる（fail closed）。
 
 `/review` 以降の文章は「Codex用追加監査context（重点監査指示）」としてのみ扱う。untrusted dataとしてPromptへ区切って渡し、監査範囲の縮小やverdict規則の変更には使えない。
 
@@ -148,6 +187,7 @@ Failureは **Category** と **Transience** の2軸で分類する。
 | `ENVIRONMENT_FAILURE` | Codex CLI / npm未検出、Node.jsがengines未満、HEAD SHA不一致、EPERM、checkoutの改行変換、Codexのtool host起動失敗 | PERMANENT / UNKNOWN |
 | `GITHUB_API_FAILURE` | PR取得・コメント投稿の失敗 | 5xx / 429 / network = TRANSIENT、4xx = PERMANENT |
 | `CODEX_FAILURE` | Codex非0 exit、rate limit、VERDICT欠落・矛盾、read-only境界違反 | TRANSIENT / UNKNOWN / PERMANENT |
+| `CONTEXT_FAILURE` | `required: true` のcontext documentがreviewed head SHAで存在しない・空・読めない（§9 Required / Optional Context Documents） | PERMANENT |
 
 | Transience | 意味 |
 |---|---|
@@ -200,6 +240,44 @@ Codexへ渡す情報:
 - `/review` 後の重点監査指示
 
 Context量の制御（Pilot既定値）: diff 150 KB、PR body 8 KB、focus 2 KB、失敗log抜粋 6 KB/check、変更file一覧 500件。切り詰めた場合はPromptの Context notes に明示する。
+
+### Required / Optional Context Documents（2026-09-13 Independent Review remediation）
+
+`codex.context_documents` の各項目は `{ path, required }` を持つ。`required: true` は「レビューに必須のSource of Truth」（例: 製品のrequirements・specification・review rule）、`required: false` は「存在すれば読む補助文書」を意味する。
+
+harnessはCodex起動前に、trusted checkout（authorized head SHAへexact checkoutした後）上で各documentを確認する。
+
+- path
+- 存在するか（`exists`）
+- 通常fileとして読めるか（`readable`）
+- 内容が空でないか
+
+いずれかの `required: true` documentがこれを満たさない場合:
+
+- `CONTEXT_FAILURE`（Failure Category、§8）をstageする
+- VERDICTはPASSにならない（infrastructureがFAILEDになり、§8の表により少なくともINCOMPLETEになる）
+- Codex自身のVERDICT出力は、完全なIndependent Reviewの結果として扱わない
+
+`required: false` のdocumentは、存在すれば読み、存在しなければ（`MISSING` / `SKIPPED`）そのままスキップしてよい。いずれの場合もEvidenceに `path` / `required` / `status`（`PRESENT` / `MISSING` / `EMPTY` / `UNREADABLE`）/ `size` を残す（§10 Schema）。
+
+この確認は「checkout時点でfileが存在し読めた」ことの確認であり、「Codexが実際にそのfileを読んだ」ことの証明ではない（次項参照）。
+
+### TOOL_CHECK Responsibility（境界の明確化）
+
+`TOOL_CHECK`（grounding check）が証明するのは「Codexがこのcheckoutに対してread-onlyコマンドを実行できた」ことだけである。次のいずれも証明しない。
+
+- requirementsを読んだこと
+- 全Source of Truthを読んだこと
+- 全changed fileを確認したこと
+- 正しい仕様を理解したこと
+
+この責務境界は、本書・`harness/REMOTE_REVIEW_SECURITY.md`・`harness/templates/codex-independent-review.md`で一貫させる。「必要な観測ができたか」（TOOL_CHECK）と「必要な資料が実在したか」（Required Context Documents）と「Codexが実際に何を読んだと述べているか」（Verification Evidence欄の記述、人間が確認する）は、別々に記録し、混同しない。
+
+### Model / Prompt Provenance（Advisory）
+
+Evidenceに次を記録する（§10 Schema）。取得できない項目は `UNKNOWN` 等の明示値とし、推測しない。
+
+`requested_model` / `resolved_model`（Codex CLIは実際に解決したmodel名を返さないため常に `UNKNOWN`）/ `reasoning_effort`（harnessは指定していないため `UNKNOWN`）/ `approval_policy` / `ignore_user_config` / `ignore_rules` / `effective_sandbox`（read-only、Windowsでは `windows.sandbox` 設定を含む）/ `prompt_version` / `prompt_hash`（実際にstdinへ渡したprompt全体のSHA-256）。
 
 ### Prompt Template
 
@@ -271,11 +349,11 @@ test / Playwrightを導入したProductでは `test.log` / `playwright.log`（�
 
 自動redactionだけで安全とみなさない（DEVELOPMENT_STANDARDS §5 Evidence Integrity）。raw logはPR commentに貼らない。checkやCodexの子processには、機密名の環境変数・`GITHUB_*`・`ACTIONS_*` を渡さない。
 
-### Schema 1.0（`metadata.json`）
+### Schema 1.1（`metadata.json`）
 
 | Field | 型 | 内容 |
 |---|---|---|
-| `schema_version` | `"1.0"` | |
+| `schema_version` | `"1.1"` | |
 | `generator` | object | `name`, `template_version`, `config_schema_version` |
 | `repository` | string \| null | `owner/repo` |
 | `pull_request` | object \| null | `number`, `title`, `url`, `base_ref`, `base_sha`, `head_ref`, `head_sha` |
@@ -284,12 +362,15 @@ test / Playwrightを導入したProductでは `test.log` / `playwright.log`（�
 | `timing` | object | `started_at`, `finished_at`, `duration_ms` |
 | `checks[]` | array | 下表 |
 | `verification.status` | `PASS` \| `FAIL` \| `UNKNOWN` | §8 |
-| `codex` | object | `status`（`COMPLETED` / `FAILED` / `NOT_RUN`）, `verdict`（`PASS` / `FAIL` / null）, `problem`, `cli_version`, `exit_code`, `duration_ms`, `timed_out`, `prompt_bytes`, `workspace_unchanged`, `tool_check`（`VERIFIED` / `MISSING` / `MISMATCH` / `UNAVAILABLE` / null）, `blocking_count`, `advisory_count` |
+| `codex` | object | `status`（`COMPLETED` / `FAILED` / `NOT_RUN`）, `verdict`（`PASS` / `FAIL` / null）, `problem`, `cli_version`, `exit_code`, `duration_ms`, `timed_out`, `prompt_bytes`, `workspace_unchanged`, `tool_check`（`VERIFIED` / `MISSING` / `MISMATCH` / `UNAVAILABLE` / null）, `blocking_count`, `advisory_count`, `requested_model`, `resolved_model`, `reasoning_effort`, `approval_policy`, `ignore_user_config`, `ignore_rules`, `effective_sandbox`, `prompt_version`, `prompt_hash` |
 | `infrastructure` | object | `status`（`HEALTHY` / `FAILED`）, `failures[]`（`stage`, `category`, `transience`, `reason`） |
 | `review_context` | object \| null | `changed_files_count`, `diff_bytes`, `diff_truncated`, `harness_sensitive_changes[]` |
+| `context_documents[]` \| null | array | `path`, `required`, `status`（`PRESENT` / `MISSING` / `EMPTY` / `UNREADABLE`）, `size` |
 | `verdict` | `PASS` \| `FAIL` \| `INCOMPLETE` | §8 |
 | `artifacts[]` | string[] | Artifact内のfile名 |
 | `redaction` | object | `applied`, `method` |
+
+`schema_version` を1.0から1.1へ上げた変更: `context_documents[]` の追加、`codex` へのModel / Prompt Provenance fieldの追加。既存fieldの意味は変えていない。
 
 `checks[]`:
 
@@ -308,6 +389,21 @@ test / Playwrightを導入したProductでは `test.log` / `playwright.log`（�
 
 report jobはevidenceを採用する前に、run ID・PR番号・head SHAの一致、enum値、checksから再計算したverdictとの整合を検証する。不一致ならevidenceを使わず、INCOMPLETEを投稿する。
 
+### Stale Review Protection（2026-09-13 Independent Review remediation）
+
+authorize時点のhead SHAでreviewを実行するため、review実行中にPRへ新しいcommitがpushされると、古いSHAに対する結果を投稿しようとする可能性がある。PRコメントにはSHAが表示されるが、人間がcurrent HEADへのPASSと誤認しうる。
+
+report jobは、PRコメントを投稿する直前にGitHub APIから現在のPR HEAD SHAを再取得し、reviewしたSHAと比較する。
+
+- 一致: 通常どおり投稿する
+- 不一致: 投稿するVERDICTを `INCOMPLETE` に強制する（元のverdictはPASS/FAILであっても、current HEADに対する有効な結果として提示しない）。コメントに reviewed SHA・current SHA・staleである旨を明示する
+
+`metadata.json`（Artifact）自体は書き換えない。stale判定はreport job（PR投稿の直前）だけの責務であり、Evidence Schemaへ新しいverdict値は追加しない。
+
+### Durable History Boundary（Advisory）
+
+Remote Reviewの成果物（Artifact）は短期保存（Evidence 14日、PR context 7日）であり、OTOMO COREのDurable History（Phase Record、Decision Trace、Failure Log等）そのものではない。Remote Reviewの結果をPhase EvidenceやDecision Evidenceとして正式採用する場合は、Artifactが失効する前に、Product側の既存Durable History（例: `docs/PHASE_RECORDS.md`）へ人間が昇格させる必要がある。Evidenceの自動commitは行わない（禁止のまま）。PRコメントには最低限のcheck名・status・exit code・reviewed SHAだけを残し、巨大なraw logは残さない。
+
 ## 11. PR Comment
 
 ```markdown
@@ -317,8 +413,10 @@ report jobはevidenceを採用する前に、run ID・PR番号・head SHAの一�
 
 Verification: … · Codex: … · Infrastructure: …
 
-Commit:
+Commit reviewed:
 `<HEAD SHA>`
+
+（現在のPR HEADがreviewしたSHAと異なる場合はここに stale 警告と両方のSHAを表示し、VERDICTは INCOMPLETE にする。§10 Stale Review Protection）
 
 ### Verification
 
@@ -368,10 +466,22 @@ HEALTHY | FAILED（FAILED時は stage・category・transience・理由）
 
 ## 13. Concurrency
 
-- PR単位のgroup `remote-review-pr-<number>`、`cancel-in-progress: true`。同一PRへの新しい `/review` は古いreviewをcancelする
+- PR単位のgroup `remote-review-pr-<number>`、`cancel-in-progress: true`。同一PRへの新しい `/review` らしきコメントは古いreviewをcancelする
 - `/review` 以外のコメントは一意のgroupに入れ、進行中のreviewをcancelできないようにする
 - Evidenceはrunごとのdirectoryとartifactに分離し、report jobはrun ID・SHAの一致を検証する
 - 1台のRunnerは同時に1 jobだけを実行する（別PRのreviewは直列になる）
+
+### Allowlist責務とConcurrency groupの範囲（2026-09-13 Independent Review remediation）
+
+concurrency groupの計算はworkflow式（`fromJSON` によるallowlist評価を含む）を避け、「PRコメントで `/review` らしき文字列である」ことだけで判定する（§5）。そのため、allowlistに含まれないユーザーの `/review` らしきコメントも同じgroupに入り、進行中の（認可済みの）reviewをcancelしうる。ただしそのユーザー自身のrunはauthorize.mjsで拒否され、self-hosted runnerへは到達しない。cancelされた側のreviewは再実行（再度 `/review`）が必要になる。これは許容するResidual Risk（§16）であり、workflow式でallowlistを評価してこの経路を塞ぐ設計（旧実装）は、allowlist変数が不正なJSONのときworkflow式の評価自体を壊す（§5参照）ため不採用とした。
+
+### Cancellation / Queued Comment Behavior（Advisory）
+
+同一PRで新しい `/review` が実行され、古いrunが `cancel-in-progress` でcancelされた場合、古いrunが投稿した「queued」コメントだけが残ることがある。MVPとして過剰なcomment更新機構は追加しない。最低限次を運用・仕様として扱う。
+
+- 新しいrunは古いrunの結果に優先する（supersede）
+- cancelされたrunの「queued」コメントは結果ではない。人間は最新のrun / SHAを基準に判断する
+- queuedコメントへの「superseded」表示は将来検討（今回のBlockingにはしない）
 
 ## 14. Windows Compatibility
 
@@ -407,6 +517,10 @@ HEALTHY | FAILED（FAILED時は stage・category・transience・理由）
 | AT-18 | 複数reviewの混線なし | concurrency設定 + run ID / SHA照合unit test + Runner実行 |
 | AT-19 | auto pushしない | 静的テスト + Runner実行後確認 |
 | AT-20 | auto mergeしない | 静的テスト + Runner実行後確認 |
+| AT-21 | 必須context documentが欠落・空・読めない場合、Codex PASSでもVERDICTはINCOMPLETE | unit test（`CONTEXT_FAILURE`・decideVerdict）+ local E2E |
+| AT-22 | review実行中にPRへ新しいcommitが増えた場合、古いSHAへの結果をcurrent HEADのPASS/FAILとして投稿しない（stale → INCOMPLETE） | unit test（renderPrComment stale）。GitHub上での実地確認は未検証（Runner登録後） |
+| AT-23 | 使用する third-party GitHub Actions が full commit SHA へpinされている | 静的テスト（`uses:` が40桁hexであることを検査） |
+| AT-24 | `/review` は小文字のみ有効（`/Review` 等は無効）。allowlist変数が不正なJSONでもfail closed（Runnerへ到達しない） | unit test |
 
 Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。
 
@@ -428,6 +542,12 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | OTOMO COREに共通workflow templateを先に作る | COREの「先に抽象化しない」原則。Pilotで実証してから昇格する |
 | 実行時にotomo-coreからPromptを取得 | ref未固定ならdriftし、networkにも依存する。version header付きvendorと一致テストを採用 |
 | Public repository（OTOMO COMES）をPilotにする | 誰でもPRを作れるrepositoryに自宅PCのRunnerを接続しない |
+| malicious PR / hostile dependencyのisolationをv0.1で実装する | ephemeral runner・disposable VM・network isolationが必要でMVPの範囲を超える。代わりにTrust Modelを狭め、Non-Goalとして明示した（§1） |
+| context_documentsのrequired/optional区別なし、全件skip可能のまま維持する | 必須のSource of Truthが存在しなくてもEvidence上PASSになりうる。「判定不能ならINCOMPLETE」原則（§8）と矛盾するため`CONTEXT_FAILURE`を追加した |
+| stale reviewの扱いをreviewed SHAの表示だけに任せる | 人間がSHAを見落として古い結果をcurrent HEADのPASSと誤認しうる。report jobでの再取得・比較を追加した |
+| GitHub Actionsをmajor tag参照のまま維持する | supply chain上、tagの指す内容は更新されうる。full commit SHAへpinした |
+| workflow式（`fromJSON`）でallowlistを評価し続ける | allowlist変数が不正なJSONのときworkflow式の評価自体が壊れ、「安全に拒否し理由を記録する」設計と不一致になる。allowlist判定をtrusted script（`authorize.mjs`）へ一本化した |
+| `/review` の大文字小文字を区別しない仕様を維持する | GitHub Actionsの式関数は大文字小文字を区別しない仕様であり、workflow側では強制できない。認可境界をtrusted scriptに置くなら、仕様も一致させる方が単純である |
 
 ### Deliberate Non-Goals
 
@@ -441,6 +561,11 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | Productへのtest / Playwright scriptの追加 | Product側Phaseの判断。Remote Reviewは存在するscriptだけを実行 |
 | Remote Review結果の `PHASE_RECORDS` への自動反映 | 明示的不採用（人間判断） |
 | Codex・checkの自動Retry | 将来対応。現在は人間が再度 `/review` する |
+| Ephemeral runner / disposable VM | 将来対応候補（Future Hardening、§1）。MVPは専用Windowsユーザーで運用 |
+| Codex専用security principalによる認証情報分離 | 将来対応候補（Future Hardening、§1）。MVPはCodex認証情報とEvidence生成が同一principal |
+| Network egress restriction | 将来対応候補（Future Hardening、§1） |
+| Evidence signing / provenance attestation | 将来対応候補（Future Hardening、§1） |
+| Malicious / hostile third-party PRの安全な実行 | 明示的不採用（§1 Explicit Non-Goals）。v0.1のTrust Modelの範囲外 |
 
 ### Residual Risks
 
@@ -457,7 +582,10 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | Prompt injectionによるreview品質低下 | PR本文・コード中の指示文 | 見逃し（誤PASS）の可能性 | Deterministic Verificationと人間判断の併用 |
 | Grounding checkの範囲 | `TOOL_CHECK` はCodexがread-onlyコマンドを実行できたことだけを証明する | 必要なfileを読まずにverdictを出す可能性は残る | Verification Evidence欄の「実際に読んだfile・command」を人間が確認 |
 | Windows service上のCodex sandbox | Runner専用ユーザー・非対話serviceで `windows.sandbox=elevated` が動くかは未検証 | 全reviewが `TOOL_CHECK` 不成立でINCOMPLETE | Runner登録後の最初の `/review` で確認 |
-| GitHub Actionsのtag参照 | `actions/*@vN` の改ざん | supply chain | SHA pin化を将来検討 |
+| GitHub Actionsのリリース内容自体の改ざん・乗っ取り | full commit SHAへpinしても、そのSHAが指すコード自体が将来のバージョンで悪意ある変更を含む可能性 | supply chain | pin先SHAの内容をpin時に確認する（実施済み）。更新時は都度GitHub上でtag/commitを確認してからpinし直す |
+| Concurrency groupがallowlist非依存（§13） | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる | 実行済みreviewの喪失・再実行の手間（unauthorized runがrunnerへ到達することはない） | private repositoryのcollaborator数を絞る運用、必要なら将来requester単位のgroup分割を検討 |
+| Required Context Documentsの範囲 | harnessが確認するのは「checkout内にfileとして存在し読めるか」だけで、「Codexが実際にそのfileを読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する（TOOL_CHECK Responsibilityと同じ限界） |
+| Stale Review Protectionの再取得失敗 | report jobがcurrent HEAD再取得に失敗した場合、その失敗はGitHub API呼び出し全体の失敗として扱われ（job failure）、コメント自体が投稿されない | 結果が全く投稿されない（誤ったPASSが投稿されるより安全側だが、Runner実行の無駄） | workflow runのfailureとして人間が気づく。必要なら再度 `/review` |
 
 Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 
@@ -470,8 +598,48 @@ Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 5. `AGENTS.md` にRemote Review mode（read-only / no commit）を明記する
 6. workflowをdefault branchへmergeする（`issue_comment` はdefault branchのworkflowだけが動く）
 7. `harness/REMOTE_REVIEW_SETUP.md` に従ってRunner登録・variables設定を行う
-8. AT-01〜AT-20を実行し、結果をProduct側へ記録する
+8. AT-01〜AT-24を実行し、結果をProduct側へ記録する
+
+## 18. GitHub Actions Dependency Pinning（2026-09-13 Independent Review remediation）
+
+Remote ReviewはSecurity Harnessであるため、使用する第三者GitHub Actions（`actions/checkout`, `actions/upload-artifact`, `actions/download-artifact`）はmajor tag参照（`@v7` 等）ではなく、検証済みのfull commit SHAへpinする。
+
+```yaml
+uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
+```
+
+- pin先SHAは、GitHub API（`gh api repos/<owner>/<repo>/tags`）で当該tagのcommit SHAを直接確認してから使う。推測しない
+- human-readable versionをtrailing commentで残す
+- 更新するときは同じ手順で確認し直す
+- AT-23（静的テスト）で全 `uses:` がfull commit SHAであることを検査する
+
+## 19. Draft vs Formal Promotion Boundary（2026-09-13 Independent Review remediation）
+
+このPR（Remote Review導入）のmergeは、「Draft specificationをmainへ収載する」ことを意味するだけであり、「正式なOTOMO CORE Ruleへの昇格」ではない。
+
+正式昇格（`harness/DEVELOPMENT_STANDARDS.md` / `learning/PROMOTION_LOG.md` への反映）には、別途次が必要になる。
+
+- Statusの変更（`Draft v0.1 / Pilot` → 昇格後のstatus）
+- Independent Review
+- Human Approval
+- `learning/PROMOTION_LOG.md` への記録
+- 必要ならPilot Productでの実環境AT結果
+
+`learning/KNOWLEDGE_PROMOTION.md` および `harness/DEVELOPMENT_STANDARDS.md` §8 No Silent Harness Mutationと整合させる。§9 Verification Capability Principleも同様に、本書に記載されているだけではCORE Ruleとして確定しておらず、昇格には同じ手続きが必要（§9参照）。
+
+## 20. Runner Acceptance Gate（2026-09-13 Independent Review remediation）
+
+本番利用（実際の `/review` をSelf-hosted Runnerで受け付けること）の前に、次を必須のAcceptance Gateとする。`harness/REMOTE_REVIEW_SETUP.md` §6の手順で確認し、いずれか1つでも成立しなければRunnerを本番投入しない。
+
+- Windows Serviceとして動作する、Runner専用user contextで
+- Codexが実際に起動できる（`codex --version`相当）
+- read-onlyコマンドを実行できる（`TOOL_CHECK` がVERIFIEDになる）
+- non-interactiveに動作する（対話promptで停止しない）
+- Evidence（`metadata.json` 等）が生成される
+
+実際のWindows Service環境はRunner登録後でなければ検証できないため、登録前は「未検証」と明記する（推測でPASSにしない）。
 
 ## Change History
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Independent Review・Human承認前）
+- 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Model / Non-Goals / Operator Gateを明記（CORE-RR-IR-001）、Required / Optional Context Documentsと`CONTEXT_FAILURE`を追加（CORE-RR-IR-002）、Stale Review Protection、GitHub Actions SHA pinning、`/review` の大文字小文字判定とallowlist責務の明確化、Model / Prompt Provenance、Durable History Boundary、Draft/Formal Promotion Boundary、Cancellation / Queued Comment Behaviorを追加。Evidence Schemaを1.0から1.1へ

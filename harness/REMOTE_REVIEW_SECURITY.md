@@ -9,6 +9,8 @@
 
 Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎回破棄されない。PRの install / build / lint は、Runnerユーザーの権限で任意コードを実行しうる。
 
+**Trust Model（`harness/REMOTE_REVIEW.md` §1 Supported Trust Model）**: 本Policyは「private repositoryにおいて、人間が事前に確認し、自宅PCのRunner上で実行してよいと判断したPR」だけを対象とする。信頼済みの対象にはsource codeだけでなく、`package.json` / lockfile、依存の追加・更新、npm lifecycle script、install / build / test scriptが含まれる。malicious PR・hostile dependency・supply-chain compromiseからのisolationは**提供しない**（Explicit Non-Goal）。この前提が成立しない状況（public repository、未確認のPR）でRunnerを使わない。
+
 守る対象:
 
 - 自宅PCとRunnerユーザーのprofile
@@ -34,7 +36,7 @@ Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎
 
 | ID | Control | Pilot実装 |
 |---|---|---|
-| SEC-01 | allowlist（`REMOTE_REVIEW_ALLOWED_USERS`）、`author_association` が OWNER / MEMBER / COLLABORATOR、`type: User`、`created` イベントの場合のみ起動する | workflow `if:` による事前filter + `lib/trigger.mjs` で再検証 |
+| SEC-01 | allowlist（`REMOTE_REVIEW_ALLOWED_USERS`）、`author_association` が OWNER / MEMBER / COLLABORATOR、`type: User`、`created` イベント、小文字の `/review` の場合のみ起動する | allowlistのparse・比較・author_association・大文字小文字判定は `lib/trigger.mjs`（`authorize.mjs` から呼ばれるtrusted script）だけで行う。workflowの `if:` とconcurrency groupは、PRコメントで `/review` らしき文字列であることだけを見る、allowlist非依存のcost事前filterであり、認可境界ではない（GitHub Actionsの式関数は大文字小文字を区別せず、workflow式でallowlistを評価すると不正なJSONで評価自体が壊れるため）。allowlist変数が不正な場合は `authorized: false` / `ALLOWLIST_INVALID` を記録してfail closedする |
 | SEC-02 | event由来のテキストを `run:` へ展開しない。scriptは `GITHUB_EVENT_PATH` から読む | workflow静的テスト |
 | SEC-03 | Harness（workflow・script・config・Prompt）はdefault branchから取得し、PR head側のharnessを実行しない | `issue_comment` + `ref: github.sha` によるtrusted checkout |
 | SEC-04 | fork PR・closed PRはGitHub-hosted jobで拒否し、Self-hosted Runnerへ到達させない | `validatePullRequest` |
@@ -52,6 +54,9 @@ Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎
 | SEC-16 | report jobはevidenceをuntrustedとして検証し、`@mention` を無効化する | `validateMetadata`, `neutralizeMentions` |
 | SEC-17 | commit / push / merge / auto-fix の経路を持たない | 静的テスト（AT-16 / AT-19 / AT-20） |
 | SEC-18 | Artifactの保存期間は短期（Evidence 14日、PR context 7日） | workflow |
+| SEC-19 | 使用する第三者GitHub Actionsはfull commit SHAへpinし、major tag参照にしない | workflow静的テスト（AT-23） |
+| SEC-20 | reportがPRへコメントを投稿する直前に、GitHub APIからcurrent PR HEAD SHAを再取得し、reviewしたSHAと異なる場合は投稿するVERDICTをINCOMPLETEに強制する（stale review protection） | `report.mjs` + unit test（AT-22） |
+| SEC-21 | `codex.context_documents` の `required: true` documentが、authorized head SHAのcheckout内で存在・読取可能・非空であることを、Codex起動前にharnessが確認する。満たさない場合はVERDICTをPASSにしない | `lib/context-documents.mjs` + unit test（AT-21） |
 
 Controlを弱める変更（例: `contents: write` の追加、fork PRの許可、shell実行の導入）は、本Policyの改訂とHuman承認を先に行う。
 
@@ -69,8 +74,8 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 
 ## 4. Operator Rules
 
-1. `/review` は、そのPRのコードを自宅PCで実行してよいと判断したときだけ投稿する
-2. allowlistは必要最小限にする（原則Owner本人のみ）
+1. `/review` は、そのPRのcode・`package.json`/lockfile・依存の追加や更新・install/build/testで実行されるscriptを確認し、それらを自宅PCのRunner上で実行してよいと判断したときだけ投稿する（Operator Gate。`harness/REMOTE_REVIEW.md` §1）
+2. allowlistは必要最小限にする（原則Owner本人のみ）。allowlistに含まれる全員が、他の全員の進行中reviewをcancelしうることを理解した上で追加する（§5 Residual Risks、`REMOTE_REVIEW.md` §13）
 3. Runnerをpublic repositoryへ登録しない
 4. Runner登録tokenをファイル・チャット・Obsidianへ保存しない
 5. Remote ReviewがPASSでも、merge判断は人間が行う
@@ -88,8 +93,11 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 | Local machine compromise | PC自体の侵害 | OS更新、専用ユーザー | 本仕組みの範囲外 |
 | Prompt injection | 監査の見逃しを誘導される | untrusted区切り、Promptの優先順位、Deterministic Verificationとの併用 | LLMの性質上ゼロにできない |
 | Redactionの取りこぼし | 未知形式のsecret | 環境にsecretを置かない、Artifactの短期保存 | pattern方式の限界 |
-| Supply chain（actionsのtag参照） | `actions/*@vN` の改ざん | GitHub公式actionのみ使用 | SHA pinは未実施 |
+| Supply chain（GitHub Actionsのリリース内容） | pin先のfull commit SHAが指すコード自体が、将来のリリースで悪意ある変更を含む可能性 | GitHub公式actionのみ使用、full commit SHAへpin（pin時に内容を確認） | pinはSHAの指す内容を固定するだけで、そのSHA自体の安全性を継続監査しない |
+| Concurrency groupがallowlist非依存 | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる（`REMOTE_REVIEW.md` §13） | 実行済みreviewの喪失・再実行の手間。unauthorized runがrunnerへ到達することはない | private repositoryのcollaborator数を絞る運用 |
+| Required Context Documentsの確認範囲 | 「checkout内にfileとして存在し読めるか」だけを確認し、「Codexが実際に読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する |
 
 ## Change History
 
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Human承認前）
+- 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Modelを明記し、malicious PR isolation等がExplicit Non-Goalであることを追記。allowlist責務がtrusted scriptに一本化されたことをSEC-01に反映。SEC-19〜SEC-21（Actions SHA pin、Stale Review Protection、Required Context Documents）を追加。Residual RisksとOperator Rulesを更新
