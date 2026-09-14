@@ -58,7 +58,7 @@ Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎
 | SEC-20 | reportがPRへコメントを投稿する直前に、GitHub APIからcurrent PR HEAD SHAを再取得し、reviewしたSHAと異なる場合は投稿するVERDICTをINCOMPLETEに強制する（stale review protection）。取得したSHAが欠落・不正な場合も「一致」とfail-openせず、同様にINCOMPLETEに強制する（2026-09-14追加。GET/POST間のTOCTOUはResidual Risk） | `report.mjs` + unit test（AT-22） |
 | SEC-21 | `codex.context_documents` の `required: true` documentが、authorized head SHAのcheckout内で存在・読取可能・非空であることを、Codex起動前にharnessが確認する。満たさない場合はVERDICTをPASSにしない | `lib/context-documents.mjs` + unit test（AT-21） |
 | SEC-22 | report jobは、自身が独立にcheckoutしたtrusted `codex.context_documents` manifestと、Evidenceの `context_documents[]` を照合する。`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあれば、Evidenceの自己申告verdictを採用せずINCOMPLETEとする（2026-09-14追加、CORE-RR-IR-002） | `lib/context-documents.mjs`（`validateContextDocumentManifest`）+ `report.mjs` + unit test（AT-25） |
-| SEC-23 | Product `AGENTS.md` がRemote Reviewの必須Source of Truthとして列挙した文書と、`codex.context_documents` の内容（`required: true` entryの集合）が一致することを、開発時のtest（CI）で機械的に検証する。必須entryの削除・`required: true → false`への変更・想定外entryの追加・duplicate entryのいずれかがあればtestがFAILする（2026-09-14追加、CORE-RR-IR-002再remediation） | Product `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）+ mutation test |
+| SEC-23 | Product `AGENTS.md` がRemote Reviewの必須Source of Truthとして列挙した文書と、`codex.context_documents` の内容（`required: true` entryの集合）が一致することを、開発時のautomated test suiteで機械的に検証する。必須entryの削除・`required: true → false`への変更・想定外entryの追加・duplicate entryのいずれかがあればtestがFAILする（2026-09-14追加、CORE-RR-IR-002再remediation）。通常PRのCIで自動強制する仕組みはまだ無く、`node --test`の手動/harness実行に依存する | Product `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）+ mutation test |
 
 Controlを弱める変更（例: `contents: write` の追加、fork PRの許可、shell実行の導入）は、本Policyの改訂とHuman承認を先に行う。
 
@@ -108,3 +108,4 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 - 2026-09-14 文書ドリフト修正（Codex再レビュー前）: §3 Runner環境の将来候補からGitHub Actions SHA pinを削除（SEC-19で実装済みのため重複記述だった）
 - 2026-09-14 Independent Re-review remediation（CORE-RR-IR-002未解決分）: SEC-20にhead SHA取得不能時のfail-open除去を追記、SEC-22（Context Documents Manifest Cross-Check）を追加。Residual RisksにGET/POST TOCTOUとManifest Cross-Checkの確認範囲を追加
 - 2026-09-14 Independent Re-review remediation（CORE-RR-IR-002再remediation、Blocking）: SEC-23（AGENTS.md ↔ config.json manifest一致の開発時test）を追加。Residual RisksのManifest Cross-Checkの確認範囲を、SEC-23の追加を前提に更新
+- 2026-09-14 文書ドリフト修正（Independent Re-review前）: SEC-23の表現を実装実態へ整合（「開発時のtest（CI）」→「開発時のautomated test suite」。通常PRのCIによる自動強制はまだ無く、実装は`node --test`のharness/手動実行に依存する旨を明記。新規のCI強制は実装していない）
