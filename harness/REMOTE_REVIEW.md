@@ -270,7 +270,7 @@ harnessはCodex起動前に、trusted checkout（authorized head SHAへexact che
 
 - Product `AGENTS.md`（またはこれに相当するReview entrypoint文書）が「レビュー前に読むべき」と定義したfile-backedなSource of Truthは、`scripts/remote-review/config.json`の`codex.context_documents`に`required: true`として存在しなければならない
 - `context_documents`の`required`をtrueからfalseへ変更する、またはmanifestからentryを削除するのは、Product側の「読むべきSource of Truth」定義（`AGENTS.md`等）を同じ変更の中で先に、または同時に書き換えてからにする。manifest側だけを単独で緩めない
-- Productはこの一致を回帰テストで検証する（例: `otomo-lab` `scripts/remote-review/test/harness.test.mjs`、Product `AGENTS.md`の一覧とconfig.jsonの`codex.context_documents`を照合するテスト）
+- Productはこの一致を回帰テストで検証する（2026-09-14 CORE-RR-IR-002再remediationで実装。`otomo-lab`の実装: `scripts/remote-review/lib/source-of-truth.mjs`の`checkSourceOfTruthManifestConsistency`が、Product `AGENTS.md`の該当tableから必須path一覧を抽出し、`config.json`の`codex.context_documents`と照合する。`scripts/remote-review/test/source-of-truth.test.mjs`が、必須entry削除・`required: true → false`・想定外entry追加・duplicate entryの4種のmutationすべてでtestがFAILすることを検証する）。この抽出は、AGENTS.mdの自由な文章（prose）全体をparseするのではなく、AGENTS.md自身が定義する固定table構造（見出しと`| \`path\` | ... |`形式の行）だけに依存し、table自体が見つからない場合は「必須文書ゼロ」と静かに解釈せず例外を投げる
 - どのProduct文書が「レビュー前に読むべき」かの判断自体は、既存Harness（本書・Product `AGENTS.md`・`docs/DEVELOPMENT_STANDARDS.md`等）とProduct固有ルールから行う。本書はmanifestとProduct定義を一致させることだけを要求し、どの文書が必須かをCORE側で決定しない
 
 ### Context Documents Manifest Cross-Check（report job、2026-09-14 Independent Re-review remediation、CORE-RR-IR-002）
@@ -630,7 +630,7 @@ Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 5. `AGENTS.md` にRemote Review mode（read-only / no commit）を明記する
 6. workflowをdefault branchへmergeする（`issue_comment` はdefault branchのworkflowだけが動く）
 7. `harness/REMOTE_REVIEW_SETUP.md` に従ってRunner登録・variables設定を行う
-8. AT-01〜AT-24を実行し、結果をProduct側へ記録する
+8. AT-01〜AT-25を実行し、結果をProduct側へ記録する
 
 ## 18. GitHub Actions Dependency Pinning（2026-09-13 Independent Review remediation）
 
@@ -676,3 +676,4 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成（Independent Review・Human承認前）
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Model / Non-Goals / Operator Gateを明記（CORE-RR-IR-001）、Required / Optional Context Documentsと`CONTEXT_FAILURE`を追加（CORE-RR-IR-002）、Stale Review Protection、GitHub Actions SHA pinning、`/review` の大文字小文字判定とallowlist責務の明確化、Model / Prompt Provenance、Durable History Boundary、Draft/Formal Promotion Boundary、Cancellation / Queued Comment Behaviorを追加。Evidence Schemaを1.0から1.1へ
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002未解決分の再remediation）: `required: true`presence checkだけでは、Productが必須と定義するSource of Truthがそもそも`codex.context_documents` manifestから漏れること自体を防げない、という残存Blockingを解消。Source of Truth Manifest Consistency原則（本書§9）と、report jobによるtrusted manifest ↔ Evidence `context_documents[]`のcross-check（`null`・entry欠落・required flag不一致・非PRESENT required entry・重複/想定外entryをすべてINCOMPLETEへ倒す、AT-25）を追加。Advisory 3件を解消: (1) report jobの現在HEAD SHA取得が欠落・不正な場合のfail-open除去（GET/POST間のTOCTOUはResidual Riskとして明記）、(2) `COMPLETED` EvidenceのModel / Prompt Provenance field（存在・型・`prompt_hash`のSHA-256形式）をreport側で検証、(3) `metadata.json`の`Schema 1.0`表記を`Schema 1.1`へ修正（§10、`evidence.mjs`）。Pilot実装（`otomo-lab`）のtest suiteを58から66へ拡張
+- 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002再remediation、Blocking）: Source of Truth Manifest Consistency原則（本書§9）はAGENTS.md ↔ config.jsonの一致を「恒久的な運用規則」として文章化していたが、それを機械的に検証する回帰テストが存在せず、将来configから必須entryを削除する・`required: false`へ弱めるといった変更が無検出でPASSしうる、という指摘（CORE-RR-IR-002再remediation）を解消。`otomo-lab` `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）と`test/source-of-truth.test.mjs`を追加し、必須entry削除・`required: true → false`・想定外entry追加・duplicate entryの4種のmutationすべてでtestがFAILすることと、現行10文書manifestでPASSすることを確認（SEC-23）。Advisory 2件を解消: (1) Evidence Schema 1.1 provenance — `COMPLETED`時のprovenance文字列を空文字列も拒否するnon-empty必須にし、`prompt_version`をnon-null必須にした上で、null/空/欠落/不正形式の`prompt_hash`に対するnegative testを追加（`resolved_model`/`reasoning_effort`の`"UNKNOWN"`は引き続き許容）、(2) §17 Product Adoptionの`AT-01〜AT-24`表記を、既存AT表と一致する`AT-01〜AT-25`へ修正。Pilot実装（`otomo-lab`）のtest suiteを66から78へ拡張

@@ -58,6 +58,7 @@ Self-hosted Runnerは永続環境であり、GitHub-hosted runnerのように毎
 | SEC-20 | reportがPRへコメントを投稿する直前に、GitHub APIからcurrent PR HEAD SHAを再取得し、reviewしたSHAと異なる場合は投稿するVERDICTをINCOMPLETEに強制する（stale review protection）。取得したSHAが欠落・不正な場合も「一致」とfail-openせず、同様にINCOMPLETEに強制する（2026-09-14追加。GET/POST間のTOCTOUはResidual Risk） | `report.mjs` + unit test（AT-22） |
 | SEC-21 | `codex.context_documents` の `required: true` documentが、authorized head SHAのcheckout内で存在・読取可能・非空であることを、Codex起動前にharnessが確認する。満たさない場合はVERDICTをPASSにしない | `lib/context-documents.mjs` + unit test（AT-21） |
 | SEC-22 | report jobは、自身が独立にcheckoutしたtrusted `codex.context_documents` manifestと、Evidenceの `context_documents[]` を照合する。`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあれば、Evidenceの自己申告verdictを採用せずINCOMPLETEとする（2026-09-14追加、CORE-RR-IR-002） | `lib/context-documents.mjs`（`validateContextDocumentManifest`）+ `report.mjs` + unit test（AT-25） |
+| SEC-23 | Product `AGENTS.md` がRemote Reviewの必須Source of Truthとして列挙した文書と、`codex.context_documents` の内容（`required: true` entryの集合）が一致することを、開発時のtest（CI）で機械的に検証する。必須entryの削除・`required: true → false`への変更・想定外entryの追加・duplicate entryのいずれかがあればtestがFAILする（2026-09-14追加、CORE-RR-IR-002再remediation） | Product `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）+ mutation test |
 
 Controlを弱める変更（例: `contents: write` の追加、fork PRの許可、shell実行の導入）は、本Policyの改訂とHuman承認を先に行う。
 
@@ -98,7 +99,7 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 | Concurrency groupがallowlist非依存 | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる（`REMOTE_REVIEW.md` §13） | 実行済みreviewの喪失・再実行の手間。unauthorized runがrunnerへ到達することはない | private repositoryのcollaborator数を絞る運用 |
 | Required Context Documentsの確認範囲 | 「checkout内にfileとして存在し読めるか」だけを確認し、「Codexが実際に読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する |
 | Stale Review Protectionの GET/POST TOCTOU（2026-09-14追加） | report jobが現在のHEAD SHAを確認した直後から、PRコメントをPOSTするまでの間に新しいcommitがpushされる | 投稿されたコメントの「一致」判定は投稿直前の一時点のもの | GitHub REST APIにcompare-and-swapに相当する原子的操作が無い。人間はreviewed SHAを見て必要なら再度 `/review` する |
-| Context Documents Manifest Cross-Checkの確認範囲（2026-09-14追加） | report jobはtrusted manifestとEvidenceの `context_documents[]` の整合だけを確認する。「trusted manifestに載っている文書がProductの実際のSource of Truthとして正しいか」自体はharnessが判断しない | AGENTS.md等のProduct定義とconfig.jsonのmanifestが（人間のミスにより）両方とも同じ誤りで揃っている場合、この照合では検出できない | `harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistencyに基づく人間・Independent Reviewでの確認 |
+| Context Documents Manifest Cross-Checkの確認範囲（2026-09-14追加、SEC-23で範囲を更新） | report jobはtrusted manifestとEvidenceの `context_documents[]` の整合だけを確認する。「trusted manifestに載っている文書がProductの実際のSource of Truthとして正しいか」自体はharnessが判断しない。AGENTS.mdとconfig.jsonの一致自体はSEC-23（開発時test）が機械的に検証するため、CORE-RR-IR-002の主因（一方だけ変更してもう一方を更新し忘れる）はSEC-23で塞がれている | SEC-23（開発時test）。AGENTS.mdが列挙する文書の集合そのものがProductの実際のSource of Truthとして正しいかどうかはSEC-23の範囲外 | `harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistencyに基づく人間・Independent Reviewでの確認 |
 
 ## Change History
 
@@ -106,3 +107,4 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Modelを明記し、malicious PR isolation等がExplicit Non-Goalであることを追記。allowlist責務がtrusted scriptに一本化されたことをSEC-01に反映。SEC-19〜SEC-21（Actions SHA pin、Stale Review Protection、Required Context Documents）を追加。Residual RisksとOperator Rulesを更新
 - 2026-09-14 文書ドリフト修正（Codex再レビュー前）: §3 Runner環境の将来候補からGitHub Actions SHA pinを削除（SEC-19で実装済みのため重複記述だった）
 - 2026-09-14 Independent Re-review remediation（CORE-RR-IR-002未解決分）: SEC-20にhead SHA取得不能時のfail-open除去を追記、SEC-22（Context Documents Manifest Cross-Check）を追加。Residual RisksにGET/POST TOCTOUとManifest Cross-Checkの確認範囲を追加
+- 2026-09-14 Independent Re-review remediation（CORE-RR-IR-002再remediation、Blocking）: SEC-23（AGENTS.md ↔ config.json manifest一致の開発時test）を追加。Residual RisksのManifest Cross-Checkの確認範囲を、SEC-23の追加を前提に更新
