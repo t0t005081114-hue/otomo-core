@@ -175,6 +175,22 @@ AIにテスト実行判断を任せない。Codex起動前に、Productの `scri
 | SKIPPED | scriptが未定義、または依存checkが非PASS。**PASSではない** |
 | INFRA_ERROR | processを起動できない、timeout、network / file lockによるinstall失敗など、結果を判定できない |
 
+### Verification Checks Manifest Cross-Check（report job、2026-09-14 Independent Re-review remediation、CORE-RR-RR-002）
+
+`summarizeVerification`（§10 `verification.status`）は、checkが1件もFAILせず・INFRA_ERRORもなく・PASSが1件以上あれば `PASS` を返す。これは「Evidenceの `checks[]` に列挙されているcheckだけを見る」判定であり、trusted `config.json` が `required: true` と定義したcheckがEvidence側の `checks[]` から欠落している、または非構造的な理由（依存checkの失敗以外）で `SKIPPED` のまま残っている場合まで、それ単独でFAILへ倒すことを保証しない。
+
+review job自身のcheck実行（§7）はtrusted configの順序で決定論的に走るが、`metadata.json` の `checks[]` はEvidenceとして自己申告される値であり、report jobがそのまま信用してはならない（DEVELOPMENT_STANDARDS §5 Evidence Integrity）。Context Documents Manifest Cross-Check（§9）と同じ構造で、report jobは自身が独立にcheckoutした同一trusted commit（`ref: github.sha`）から `scripts/remote-review/config.json` を読み直し、Evidenceの `checks[]` をこのtrusted `config.checks` に対して照合する。次のいずれかがあれば、Evidenceの `verification.status` / `verdict` をそのまま採用せず、PASS/FAILとしてPRへ投稿しない（INCOMPLETE、§8）。
+
+- trusted manifestにある `required: true` checkがEvidence側の `checks[]` に存在しない（id一致するentryが無い）
+- 同一idのcheckで `required` フラグがtrusted manifestと一致しない
+- 同一idのcheckで `label` がtrusted manifestと一致しない
+- trusted manifestで `required: true` のcheckが、Evidence側で `PASS` 以外のstatusになっている
+- Evidence側にtrusted manifestに存在しないidのcheckがある、またはEvidence側で同一idが重複している
+
+どのcheckが `required: true` かは、この照合対象のtrusted `config.json`（Product `scripts/remote-review/config.json`）自体をSource of Truthとする。本書・report job実装のいずれにも、必須check一覧をハードコードしない — Productがcheck構成を変更した場合、trusted configを読み直すだけでcross-checkが追従する。
+
+「検証（deterministic check）自体がFAILした」ことと「Evidenceが欠落・改ざん・不整合で判定不能」なことは異なる状態であり、この照合が検出するのは常に後者である。前者はすでに §7/§8 のVerification FAILとして扱われる。
+
 ## 8. Failure Classification
 
 Failureは **Category** と **Transience** の2軸で分類する。
@@ -305,6 +321,22 @@ Evidenceに次を記録する（§10 Schema）。取得できない項目は `UN
 `requested_model` / `resolved_model`（Codex CLIは実際に解決したmodel名を返さないため常に `UNKNOWN`）/ `reasoning_effort`（harnessは指定していないため `UNKNOWN`）/ `approval_policy` / `ignore_user_config` / `ignore_rules` / `effective_sandbox`（read-only、Windowsでは `windows.sandbox` 設定を含む）/ `prompt_version` / `prompt_hash`（実際にstdinへ渡したprompt全体のSHA-256）。
 
 **report側検証（2026-09-14 Independent Re-review remediation）**: `codex.status` が `COMPLETED` のEvidenceについて、report jobは上記provenance fieldの存在・型を検証する（`prompt_hash` はSHA-256 hex、64桁の16進文字列であることを検証する）。`resolved_model` / `reasoning_effort` が仕様上常に `"UNKNOWN"` になることは、この検証と矛盾しない——`"UNKNOWN"` は有効な文字列値として受理され、欠落や型不一致とは区別する。検証に失敗した場合はEvidence全体を採用せず、INCOMPLETEとして扱う（§10 report jobのEvidence検証）。
+
+### Codex Evidence Semantic Invariants（report job、2026-09-14 Independent Re-review remediation、CORE-RR-RR-001）
+
+上記provenance検証は各fieldの型・非空文字列であることまでしか確認しない。Independent Re-reviewは、`codex.status` / `codex.verdict` / provenance field間の**意味的整合**（例えば `status: FAILED` と `verdict: PASS` が同居していないこと、`workspace_unchanged` や `tool_check` が実際に安全な値であること）までは検証していない欠落を指摘した（CORE-RR-RR-001）。Evidenceは自己申告であり、report jobは値の型だけでなく、review jobの実装（本書§9の強制手段）が実際に保証する不変条件そのものを、Evidenceに対しても独立に確認しなければならない（DEVELOPMENT_STANDARDS §5 Evidence Integrity）。
+
+report jobは、`codex.status` が `COMPLETED` のEvidenceについて、少なくとも次をfail-closedに検証する（いずれかを満たさなければEvidence全体を採用せず、INCOMPLETEとする — VERDICTを `PASS`/`FAIL` としてPRへ投稿しない）。
+
+- `codex.status` が `COMPLETED` 以外（`FAILED` / `NOT_RUN`）のとき、`codex.verdict` は `null` 以外であってはならない（非null verdictは、review job実装上 `COMPLETED` と同時にしか設定されない — §9 出力形式）
+- `codex.tool_check` が `VERIFIED` であること（Grounding checkが証明されていないreviewは採用しない、§9 TOOL_CHECK Responsibility）
+- `codex.workspace_unchanged` が `true` であること（read-only境界が破られていないreviewは採用しない）
+- `codex.approval_policy` が `"never"` であること、`codex.ignore_user_config` / `codex.ignore_rules` がともに `true` であること（§9 強制手段どおりに起動されたことの確認）
+- `codex.effective_sandbox` が read-only設定であることを示す文字列であること。report jobはさらに、自身が独立にcheckoutしたtrusted `config.json` の `codex.windows_sandbox` と、Evidence自身の `run.runner_os`（harness-controlled、PR由来ではない）から review job実装が構成するはずの値を再現し、Evidenceの `effective_sandbox` と一致することを確認する（platform / trusted config由来の期待値との整合）
+- `codex.blocking_count` / `codex.advisory_count` が非負整数であること。`codex.verdict === "PASS"` なら `blocking_count === 0`、`codex.verdict === "FAIL"` なら `blocking_count >= 1` であること（§9 出力形式のVERDICT / Blocking Findings整合と同じ不変条件を、Evidence側でも再確認する）
+- Codex review本文（`codex-review.md`）を report jobが独立に再parseし、その結果（verdict / blocking_count / advisory_count）が `metadata.json` の `codex.verdict` / `codex.blocking_count` / `codex.advisory_count` と一致すること。`codex.status` が `COMPLETED` であるにもかかわらず `codex-review.md` が欠落・読めない場合も同様にINCOMPLETEとする
+
+未決定のまま拡大解釈しない: 上記は現行のreview.mjs実装が実際に構成する値・現行Evidence Schema 1.1が持つfieldからのみ導出しており、新しい `codex` fieldや新しいverdict値を追加しない。`resolved_model` / `reasoning_effort` の `"UNKNOWN"` 許容（上記provenance検証）と、この節の検証は独立であり、互いに矛盾しない。
 
 ### Prompt Template
 
@@ -552,6 +584,8 @@ concurrency groupの計算はworkflow式（`fromJSON` によるallowlist評価�
 | AT-23 | 使用する third-party GitHub Actions が full commit SHA へpinされている | 静的テスト（`uses:` が40桁hexであることを検査） |
 | AT-24 | `/review` は小文字のみ有効（`/Review` 等は無効）。allowlist変数が不正なJSONでもfail closed（Runnerへ到達しない） | unit test |
 | AT-25 | report jobは、trusted `codex.context_documents` manifestとEvidenceの `context_documents[]` を照合し、`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあればINCOMPLETEとする（Codexの自己申告verdictがPASSであっても採用しない） | unit test（`validateContextDocumentManifest` + report jobのfallback経路） |
+| AT-26 | report jobは、trusted `config.checks` manifestとEvidenceの `checks[]` を照合し、required check欠落・required flag不一致・label不一致・required checkが非PASS・重複/想定外entryのいずれかがあればINCOMPLETEとする（検証自体のFAILとEvidence不整合を混同しない） | unit test（`validateCheckManifest` + report jobのfallback経路） |
+| AT-27 | `codex.status` が `COMPLETED` のEvidenceについて、report jobは `codex.verdict` が非COMPLETEDでnullでない・`tool_check` が非VERIFIED・`workspace_unchanged` が非true・`approval_policy`/`ignore_user_config`/`ignore_rules` が既定値と不一致・`effective_sandbox` がtrusted config / platformの期待値と不一致・`blocking_count`/`advisory_count` がverdictと不整合・`codex-review.md` の再parse結果と `metadata.json` が不一致、のいずれかがあればINCOMPLETEとする | unit test（`validateMetadata` の新invariant + `validateCodexReviewConsistency` + `expectedEffectiveSandbox`） |
 
 Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。
 
@@ -618,6 +652,7 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | Required Context Documentsの範囲 | harnessが確認するのは「checkout内にfileとして存在し読めるか」だけで、「Codexが実際にそのfileを読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する（TOOL_CHECK Responsibilityと同じ限界） |
 | Stale Review Protectionの再取得失敗 | report jobがcurrent HEAD再取得に失敗した場合、その失敗はGitHub API呼び出し全体の失敗として扱われ（job failure）、コメント自体が投稿されない | 結果が全く投稿されない（誤ったPASSが投稿されるより安全側だが、Runner実行の無駄） | workflow runのfailureとして人間が気づく。必要なら再度 `/review` |
 | Stale Review Protectionの GET/POST TOCTOU（2026-09-14追加） | report jobが現在のHEAD SHAをGETで確認した直後から、PRコメントをPOSTするまでの間に新しいcommitがpushされる | 投稿されたコメントの「一致」判定は投稿直前の一時点のものであり、投稿完了までの間に発生した新しいpushはそのコメントに反映されない | 人間はコメントのreviewed SHAとPRの実際のHEADを見て判断し、必要なら再度 `/review` する。この窓を埋める原子的なGitHub API操作は無い |
+| Verification Checks / Codex Evidence Semantic Invariantsの確認範囲（2026-09-14追加、CORE-RR-RR-001 / CORE-RR-RR-002） | `run.runner_os` はharness（review.mjs）が`RUNNER_OS`から記録する値で、PR由来ではないが、report jobが独立に再測定した値ではない（Evidenceの一部として自己申告される）。`effective_sandbox`のcross-checkは、この値とtrusted configから「review job実装ならこう構成したはず」の期待値を再現して一致を確認するものであり、runner自体が本当にそのOS上で動いたことそのものを独立検証しない | review jobを動かすharness自体（trusted script）が偽装されない、という既存Trust Model（§1）の範囲内でのみ有効。harnessそのものが侵害された場合はこのcross-checkも無効化されうる | 既存Trust Model・Operator Gate（§1）の範囲外の脅威として扱う。将来のRunner Acceptance Gate（§20）強化時に合わせて見直す |
 
 Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 
@@ -630,7 +665,7 @@ Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 5. `AGENTS.md` にRemote Review mode（read-only / no commit）を明記する
 6. workflowをdefault branchへmergeする（`issue_comment` はdefault branchのworkflowだけが動く）
 7. `harness/REMOTE_REVIEW_SETUP.md` に従ってRunner登録・variables設定を行う
-8. AT-01〜AT-25を実行し、結果をProduct側へ記録する
+8. AT-01〜AT-27を実行し、結果をProduct側へ記録する
 
 ## 18. GitHub Actions Dependency Pinning（2026-09-13 Independent Review remediation）
 
@@ -677,3 +712,4 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 - 2026-09-13 v0.1 Draft, Independent Review remediation: Trust Model / Non-Goals / Operator Gateを明記（CORE-RR-IR-001）、Required / Optional Context Documentsと`CONTEXT_FAILURE`を追加（CORE-RR-IR-002）、Stale Review Protection、GitHub Actions SHA pinning、`/review` の大文字小文字判定とallowlist責務の明確化、Model / Prompt Provenance、Durable History Boundary、Draft/Formal Promotion Boundary、Cancellation / Queued Comment Behaviorを追加。Evidence Schemaを1.0から1.1へ
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002未解決分の再remediation）: `required: true`presence checkだけでは、Productが必須と定義するSource of Truthがそもそも`codex.context_documents` manifestから漏れること自体を防げない、という残存Blockingを解消。Source of Truth Manifest Consistency原則（本書§9）と、report jobによるtrusted manifest ↔ Evidence `context_documents[]`のcross-check（`null`・entry欠落・required flag不一致・非PRESENT required entry・重複/想定外entryをすべてINCOMPLETEへ倒す、AT-25）を追加。Advisory 3件を解消: (1) report jobの現在HEAD SHA取得が欠落・不正な場合のfail-open除去（GET/POST間のTOCTOUはResidual Riskとして明記）、(2) `COMPLETED` EvidenceのModel / Prompt Provenance field（存在・型・`prompt_hash`のSHA-256形式）をreport側で検証、(3) `metadata.json`の`Schema 1.0`表記を`Schema 1.1`へ修正（§10、`evidence.mjs`）。Pilot実装（`otomo-lab`）のtest suiteを58から66へ拡張
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002再remediation、Blocking）: Source of Truth Manifest Consistency原則（本書§9）はAGENTS.md ↔ config.jsonの一致を「恒久的な運用規則」として文章化していたが、それを機械的に検証する回帰テストが存在せず、将来configから必須entryを削除する・`required: false`へ弱めるといった変更が無検出でPASSしうる、という指摘（CORE-RR-IR-002再remediation）を解消。`otomo-lab` `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）と`test/source-of-truth.test.mjs`を追加し、必須entry削除・`required: true → false`・想定外entry追加・duplicate entryの4種のmutationすべてでtestがFAILすることと、現行10文書manifestでPASSすることを確認（SEC-23）。Advisory 2件を解消: (1) Evidence Schema 1.1 provenance — `COMPLETED`時のprovenance文字列を空文字列も拒否するnon-empty必須にし、`prompt_version`をnon-null必須にした上で、null/空/欠落/不正形式の`prompt_hash`に対するnegative testを追加（`resolved_model`/`reasoning_effort`の`"UNKNOWN"`は引き続き許容）、(2) §17 Product Adoptionの`AT-01〜AT-24`表記を、既存AT表と一致する`AT-01〜AT-25`へ修正。Pilot実装（`otomo-lab`）のtest suiteを66から78へ拡張
+- 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-RR-001 / CORE-RR-RR-002、Blocking）: `report.mjs`のEvidence検証は、`codex.status`/`codex.verdict`と、review job実装（§9強制手段）が実際に保証する不変条件（grounding確認済み、read-only境界維持、固定invocation policy）との意味的整合を検証していなかった（CORE-RR-RR-001）。Codex Evidence Semantic Invariants（本書§9）を追加し、`codex.status`が`COMPLETED`以外なら`codex.verdict`はnull以外を許さない、`tool_check`/`workspace_unchanged`/`approval_policy`/`ignore_user_config`/`ignore_rules`/`effective_sandbox`（trusted config・platformとの整合込み）/`blocking_count`・`advisory_count`（verdictとの整合込み）/`codex-review.md`本文の再parse結果、をすべてfail-closedにした（AT-27）。また、`summarizeVerification`（§10）がEvidence自己申告の`checks[]`だけを見ており、trusted `config.checks`の`required: true`checkがEvidenceから欠落・非構造的にSKIPPEDのままでも単独ではFAILに倒れない欠落があった（CORE-RR-RR-002）。Verification Checks Manifest Cross-Check（本書§7）を追加し、report jobが独立にcheckoutしたtrusted `config.checks`とEvidenceの`checks[]`を照合、required check欠落・required flag/label不一致・required checkの非PASS・重複/想定外entryをすべてINCOMPLETEへ倒す（AT-26）。Residual Risksに、この2つのcross-checkがEvidence自己申告の`run.runner_os`を前提とすることを追加。§17 Product Adoptionの`AT-01〜AT-25`表記を`AT-01〜AT-27`へ更新。Pilot実装（`otomo-lab`）のtest suiteを78から95へ拡張
