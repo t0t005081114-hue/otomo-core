@@ -189,7 +189,32 @@ review job自身のcheck実行（§7）はtrusted configの順序で決定論的
 
 どのcheckが `required: true` かは、この照合対象のtrusted `config.json`（Product `scripts/remote-review/config.json`）自体をSource of Truthとする。本書・report job実装のいずれにも、必須check一覧をハードコードしない — Productがcheck構成を変更した場合、trusted configを読み直すだけでcross-checkが追従する。
 
-「検証（deterministic check）自体がFAILした」ことと「Evidenceが欠落・改ざん・不整合で判定不能」なことは異なる状態であり、この照合が検出するのは常に後者である。前者はすでに §7/§8 のVerification FAILとして扱われる。
+**「検証（deterministic check）自体がFAILした」ことと「Evidenceが欠落・改ざん・不整合で判定不能」なことは異なる状態であり、この照合が検出するのは常に後者である**（2026-09-15追加、CORE-RR-FRR-002 semantic regression remediation。以前の記述・実装は、trusted manifestで `required: true` のcheckがEvidence側で `PASS` 以外である場合をすべてこの照合の対象＝Evidence整合性問題として扱っており、正常に実行・記録された `FAIL` / `INFRA_ERROR` / まだ非構造的理由で `SKIPPED` のままの状態までEvidence corruptionと混同していた）。
+
+- **definition integrity**（この照合の責務）: trusted manifestにある `required: true` checkがEvidence側の `checks[]` に存在しない、`required` / `label` フラグが一致しない、Evidence側に重複/想定外entryがある、または（次項）`PASS` と自己申告している場合にその実行結果がtrusted definitionの通りではない — これらはこの照合が検出し、INCOMPLETEとする
+- **execution result semantics**（この照合の対象外・§7/§8の責務）: definitionと一致する `FAIL` は §8 のVerification FAILとしてVERDICT: FAILへ、definitionと一致する `INFRA_ERROR` は §8 のInfrastructure FAILEDとして扱う。`SKIPPED` のまま残ったrequired checkは、この照合ではEvidence整合性問題としないが、`summarizeVerification`（`lib/evidence.mjs`）が「required checkは全件PASSでなければVerificationはPASSにならない」という不変条件を持つため、他のrequired checkがPASSしていてもVERDICT: PASSへは到達しない（下記Required Check PASS Requirementを参照）
+
+この責務分離により、「lintが実際にFAILした」場合は正しく `VERDICT: FAIL` として投稿され、「Evidenceが改ざん・欠落・定義不一致」の場合だけがINCOMPLETEになる。
+
+### Canonical Command Binding（report job、2026-09-15 Independent Re-review remediation、CORE-RR-FRR-001）
+
+上記の照合は、Evidenceの `id` / `required` / `label` / `status` がtrusted manifestと一致することまでしか確認していなかった。Evidence側の `checks[]` はEvidenceとして自己申告される値であり、`status: PASS` と自己申告しているcheckが、実際にtrusted `config.json` が定義したcommandを実行して得られた結果であることまでは確認していなかった（例えば `lint` のEvidence `command` を別のcommandへ差し替えても、id/required/label/statusさえ一致していればこの照合を通過しえた）。
+
+これを閉じるため、report jobは `status: PASS` を自己申告するcheckについて、次をすべてfail-closedに検証する（いずれかを満たさなければEvidence全体を採用せず、INCOMPLETEとする）。
+
+- `command` が、trusted `config.checks` の同一checkから導出した canonical invocation と一致する。`npm_script` checkは `["npm", "run", <npm_script>]`、argv checkはtrusted `command` 配列をそのまま用いる。この導出は `lib/checks.mjs` の `canonicalCommand()` 一箇所だけで行い、report job・review job・testのいずれにもcommand文字列を別途ハードコードしない（review job自身の実行 `planCheck` も同じ関数を使う）
+- `exit_code === 0`
+- `timed_out === false`
+- `skip_reason === null`
+- `failure === null`
+
+`required: false` のcheckが `PASS` を自己申告した場合も同様に検証する（`status: PASS` という自己申告そのものの信頼性を確認する照合であり、`required` の有無で対象を絞らない）。
+
+### Required Check PASS Requirement（`lib/evidence.mjs` summarizeVerification、2026-09-15 Independent Re-review remediation、CORE-RR-FRR-002）
+
+`summarizeVerification`は以前、「1件もFAILせず・INFRA_ERRORもなく・PASSが1件以上あれば `PASS`」と判定しており、Evidence側の各checkが持つ `required` フラグを見ていなかった。このため、`required: true` のcheckが（非構造的理由で）`SKIPPED` のまま残っていても、別の `required: true` checkが `PASS` していれば全体がVerification `PASS` に到達しえた（§7表の「SKIPPEDは**PASSではない**」という個別check単位の原則が、集計レベルでは保証されていなかった）。
+
+修正後は、Evidenceに `required: true` のcheckが1件以上ある場合、それら**全件**が `PASS` でなければVerificationは `PASS` にならない（`UNKNOWN` になる）。`required: true` のcheckが1件もないEvidence（想定されない構成だが）は、従来どおり「PASSが1件以上」で判定する。
 
 ## 8. Failure Classification
 
@@ -361,6 +386,7 @@ VERDICT: PASS | FAIL
 - Finding ID: `PR<PR番号>-IR-<3桁連番>`（例 `PR12-IR-001`）。Blocking / Advisoryで通し番号。OTOMO LABの既存慣行 `<scope>-IR-NNN`（例 `PH01-IR-001`）に揃え、PR番号をscopeとする
 - Finding fieldはProductのreview rule（OTOMO LAB `AGENTS.md` §6）に従う
 - VERDICT行が無い、複数で矛盾、PASSなのにBlockingあり、FAILなのにBlockingなし → `CODEX_FAILURE`（INCOMPLETE）
+- 上記5個のsectionは、それぞれちょうど1回だけ出現しなければならない（2026-09-15追加、CORE-RR-FRR-002）。**同一sectionの重複は `CODEX_FAILURE`（INCOMPLETE）とし、PASS/FAIL verdictを採用しない** — parserが以前、同名sectionを「後勝ち」で上書きしていたため、先行する `## Blocking Findings` に実際のFindingが記載され、後続の（空の）`## Blocking Findings` がそれを上書きした場合、`VERDICT: PASS` と矛盾なくparseできてしまっていた（section本文はチェックせず見出しの出現回数だけ見るため、`## blocking findings` のような大小文字違いの重複も同じ扱いで検出する）
 
 ### Verification Capability Principle（Draft / CORE昇格候補）
 
@@ -584,10 +610,12 @@ concurrency groupの計算はworkflow式（`fromJSON` によるallowlist評価�
 | AT-23 | 使用する third-party GitHub Actions が full commit SHA へpinされている | 静的テスト（`uses:` が40桁hexであることを検査） |
 | AT-24 | `/review` は小文字のみ有効（`/Review` 等は無効）。allowlist変数が不正なJSONでもfail closed（Runnerへ到達しない） | unit test |
 | AT-25 | report jobは、trusted `codex.context_documents` manifestとEvidenceの `context_documents[]` を照合し、`null`・entry欠落・required flag不一致・required entryが非PRESENT・重複/想定外entryのいずれかがあればINCOMPLETEとする（Codexの自己申告verdictがPASSであっても採用しない） | unit test（`validateContextDocumentManifest` + report jobのfallback経路） |
-| AT-26 | report jobは、trusted `config.checks` manifestとEvidenceの `checks[]` を照合し、required check欠落・required flag不一致・label不一致・required checkが非PASS・重複/想定外entryのいずれかがあればINCOMPLETEとする（検証自体のFAILとEvidence不整合を混同しない） | unit test（`validateCheckManifest` + report jobのfallback経路） |
+| AT-26 | report jobは、trusted `config.checks` manifestとEvidenceの `checks[]` を照合し、required check欠落・required flag不一致・label不一致・重複/想定外entryのいずれかがあればINCOMPLETEとする。definitionと一致する `FAIL` / `INFRA_ERROR` / `SKIPPED` はこの照合単独ではINCOMPLETEにせず、§7/§8のVerification / Infrastructure semanticsへ渡す（2026-09-15、CORE-RR-FRR-002で文言・実装とも修正） | unit test（`validateCheckManifest` + report jobのfallback経路） |
 | AT-27 | `codex.status` が `COMPLETED` のEvidenceについて、report jobは `codex.verdict` が非COMPLETEDでnullでない・`tool_check` が非VERIFIED・`workspace_unchanged` が非true・`approval_policy`/`ignore_user_config`/`ignore_rules` が既定値と不一致・`effective_sandbox` がtrusted config / platformの期待値と不一致・`blocking_count`/`advisory_count` がverdictと不整合・`codex-review.md` の再parse結果と `metadata.json` が不一致、のいずれかがあればINCOMPLETEとする | unit test（`validateMetadata` の新invariant + `validateCodexReviewConsistency` + `expectedEffectiveSandbox`） |
+| AT-28 | `status: PASS` を自己申告するcheckについて、report jobはtrusted `config.checks` から導出したcanonical invocation（`canonicalCommand()`）と `command` の一致、`exit_code === 0`、`timed_out === false`、`skip_reason === null`、`failure === null` を検証し、いずれかを満たさなければINCOMPLETEとする（2026-09-15追加、CORE-RR-FRR-001） | unit test（`validateCheckManifest` のcommand/exit_code/timed_out/skip_reason/failure mutation） |
+| AT-29 | `required: true` のcheckが1件でも `PASS` 以外（`SKIPPED` 含む）であれば、他のrequired checkがPASSしていてもVerificationは `PASS` にならない。Codexの出力に認識対象sectionの重複があれば、`VERDICT` 行の内容によらず `CODEX_FAILURE`（INCOMPLETE）とする（2026-09-15追加、CORE-RR-FRR-002） | unit test（`summarizeVerification` のrequired-SKIPPED mutation + `parseCodexReview` のduplicate-section mutation） |
 
-Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。
+Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。単体テスト・mutation testで確認済みの項目（AT-06〜AT-29の多く）と、merge後に実GitHub Actions / 自宅PC Self-hosted Runner上で確認する必要がある項目（AT-01〜AT-05、AT-18の一部、AT-22のGitHub上での実地確認など）は区別する。前者は本書のOTOMO CORE側リポジトリと `otomo-lab` の `node --test` で継続的に確認できるが、後者はRunner登録・実PR経由の `/review` 実行後でなければ「検証済み」と記録しない。
 
 ## 16. Implementation Decision Trace（2026-09-13 / Pilot）
 
@@ -665,7 +693,7 @@ Security関連の詳細: `harness/REMOTE_REVIEW_SECURITY.md` §5。
 5. `AGENTS.md` にRemote Review mode（read-only / no commit）を明記する
 6. workflowをdefault branchへmergeする（`issue_comment` はdefault branchのworkflowだけが動く）
 7. `harness/REMOTE_REVIEW_SETUP.md` に従ってRunner登録・variables設定を行う
-8. AT-01〜AT-27を実行し、結果をProduct側へ記録する
+8. AT-01〜AT-29を実行し、結果をProduct側へ記録する
 
 ## 18. GitHub Actions Dependency Pinning（2026-09-13 Independent Review remediation）
 
@@ -713,3 +741,4 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002未解決分の再remediation）: `required: true`presence checkだけでは、Productが必須と定義するSource of Truthがそもそも`codex.context_documents` manifestから漏れること自体を防げない、という残存Blockingを解消。Source of Truth Manifest Consistency原則（本書§9）と、report jobによるtrusted manifest ↔ Evidence `context_documents[]`のcross-check（`null`・entry欠落・required flag不一致・非PRESENT required entry・重複/想定外entryをすべてINCOMPLETEへ倒す、AT-25）を追加。Advisory 3件を解消: (1) report jobの現在HEAD SHA取得が欠落・不正な場合のfail-open除去（GET/POST間のTOCTOUはResidual Riskとして明記）、(2) `COMPLETED` EvidenceのModel / Prompt Provenance field（存在・型・`prompt_hash`のSHA-256形式）をreport側で検証、(3) `metadata.json`の`Schema 1.0`表記を`Schema 1.1`へ修正（§10、`evidence.mjs`）。Pilot実装（`otomo-lab`）のtest suiteを58から66へ拡張
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-IR-002再remediation、Blocking）: Source of Truth Manifest Consistency原則（本書§9）はAGENTS.md ↔ config.jsonの一致を「恒久的な運用規則」として文章化していたが、それを機械的に検証する回帰テストが存在せず、将来configから必須entryを削除する・`required: false`へ弱めるといった変更が無検出でPASSしうる、という指摘（CORE-RR-IR-002再remediation）を解消。`otomo-lab` `scripts/remote-review/lib/source-of-truth.mjs`（`checkSourceOfTruthManifestConsistency`）と`test/source-of-truth.test.mjs`を追加し、必須entry削除・`required: true → false`・想定外entry追加・duplicate entryの4種のmutationすべてでtestがFAILすることと、現行10文書manifestでPASSすることを確認（SEC-23）。Advisory 2件を解消: (1) Evidence Schema 1.1 provenance — `COMPLETED`時のprovenance文字列を空文字列も拒否するnon-empty必須にし、`prompt_version`をnon-null必須にした上で、null/空/欠落/不正形式の`prompt_hash`に対するnegative testを追加（`resolved_model`/`reasoning_effort`の`"UNKNOWN"`は引き続き許容）、(2) §17 Product Adoptionの`AT-01〜AT-24`表記を、既存AT表と一致する`AT-01〜AT-25`へ修正。Pilot実装（`otomo-lab`）のtest suiteを66から78へ拡張
 - 2026-09-14 v0.1 Draft, Independent Re-review remediation（CORE-RR-RR-001 / CORE-RR-RR-002、Blocking）: `report.mjs`のEvidence検証は、`codex.status`/`codex.verdict`と、review job実装（§9強制手段）が実際に保証する不変条件（grounding確認済み、read-only境界維持、固定invocation policy）との意味的整合を検証していなかった（CORE-RR-RR-001）。Codex Evidence Semantic Invariants（本書§9）を追加し、`codex.status`が`COMPLETED`以外なら`codex.verdict`はnull以外を許さない、`tool_check`/`workspace_unchanged`/`approval_policy`/`ignore_user_config`/`ignore_rules`/`effective_sandbox`（trusted config・platformとの整合込み）/`blocking_count`・`advisory_count`（verdictとの整合込み）/`codex-review.md`本文の再parse結果、をすべてfail-closedにした（AT-27）。また、`summarizeVerification`（§10）がEvidence自己申告の`checks[]`だけを見ており、trusted `config.checks`の`required: true`checkがEvidenceから欠落・非構造的にSKIPPEDのままでも単独ではFAILに倒れない欠落があった（CORE-RR-RR-002）。Verification Checks Manifest Cross-Check（本書§7）を追加し、report jobが独立にcheckoutしたtrusted `config.checks`とEvidenceの`checks[]`を照合、required check欠落・required flag/label不一致・required checkの非PASS・重複/想定外entryをすべてINCOMPLETEへ倒す（AT-26）。Residual Risksに、この2つのcross-checkがEvidence自己申告の`run.runner_os`を前提とすることを追加。§17 Product Adoptionの`AT-01〜AT-25`表記を`AT-01〜AT-27`へ更新。Pilot実装（`otomo-lab`）のtest suiteを78から95へ拡張
+- 2026-09-15 v0.1 Draft, Independent Re-review remediation（CORE-RR-FRR-001 / CORE-RR-FRR-002、Blocking。ChatGPT独立監査によるVerification semantics regressionの指摘を含む）: CORE-RR-RR-002で追加したVerification Checks Manifest Cross-Check（本書§7、`validateCheckManifest`）は、trusted `config.checks`のid/required/labelまでしか照合しておらず、Evidenceが`status: PASS`と自己申告するcheckが実際にtrusted definitionの`command`/`npm_script`を実行した結果であることは確認していなかった（CORE-RR-FRR-001）。Canonical Command Binding（本書§7）を追加し、`status: PASS`のcheckについて、`command`がtrusted `config.checks`から`canonicalCommand()`（`lib/checks.mjs`、review job自身の実行`planCheck`とreport jobのcross-checkが同じ関数を共有し、command文字列を別途ハードコードしない）で導出した値と一致すること、`exit_code === 0`・`timed_out === false`・`skip_reason === null`・`failure === null`であることをfail-closedに検証する（AT-28）。また、同じcross-checkは「trusted manifestで`required: true`のcheckがEvidence側で`PASS`以外」であることそのものをEvidence整合性問題として扱っており、正常に実行・記録された`FAIL`（本来のVerification FAIL、VERDICT: FAILになるべき）や`INFRA_ERROR`（Infrastructure FAILED）までEvidence corruptionと混同し、常にINCOMPLETEへ倒していた（CORE-RR-FRR-002、Verification semantics regression）。この責務を分離し、definitionと一致する`FAIL`/`INFRA_ERROR`はこの照合単独ではINCOMPLETEにせず、既存の§7/§8 Verification / Infrastructure semanticsへ渡すよう修正した。一方、`summarizeVerification`（`lib/evidence.mjs`）は「1件もFAILせず・INFRA_ERRORもなく・PASSが1件以上」という判定基準しか持たず、`required: true`のcheckが（非構造的理由で）`SKIPPED`のまま残っていても、別のrequired checkがPASSしていれば全体がVerification PASSに到達しうる欠落があった。修正後は、Evidenceに`required: true`のcheckが1件以上ある場合、それら全件がPASSでなければVerificationはPASSにならない（Required Check PASS Requirement、本書§7）。Codex出力の`extractSections`/`parseCodexReview`は、同名section（`## Blocking Findings`等）が重複した場合に後勝ちで上書きしており、先行する`## Blocking Findings`に実際のFindingが記載され、後続の空の`## Blocking Findings`がそれを上書きすると、`VERDICT: PASS`と矛盾なくparseできてしまっていた（CORE-RR-FRR-002）。認識対象5 sectionそれぞれの重複を検出し、重複があれば`CODEX_FAILURE`（INCOMPLETE）としてPASS/FAIL verdictを採用しないよう修正した（本書§9 出力形式、AT-29）。§15 Acceptance TestsにAT-28/AT-29を追加し、AT-26の記述をdefinition integrityとexecution result semanticsの分離を反映するよう修正、§17 Product Adoptionの`AT-01〜AT-27`表記を`AT-01〜AT-29`へ更新。`harness/REMOTE_REVIEW_SECURITY.md`にSEC-26/SEC-27を追加し、SEC-25の記述を同様に修正。Pilot実装（`otomo-lab`）のtest suiteを95から112へ拡張
