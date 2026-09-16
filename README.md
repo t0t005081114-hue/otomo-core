@@ -47,6 +47,10 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 
 - `harness/DEVELOPMENT_STANDARDS.md`: 全Product共通の開発標準
 - `harness/PHASE_WORKFLOW.md`: Phase単位の実装・検証・レビュー・完了手順
+- `harness/REMOTE_REVIEW.md`: PRコメント `/review` からSelf-hosted RunnerでDeterministic VerificationとCodex Independent Reviewを行うRemote Reviewの仕様（Draft / Pilot: OTOMO LAB）
+- `harness/REMOTE_REVIEW_SECURITY.md`: Remote ReviewのSecurity Policy（Draft / Human承認前）
+- `harness/REMOTE_REVIEW_SETUP.md`: Self-hosted Runner登録など、人間が行うRemote Review Setup手順
+- `harness/templates/codex-independent-review.md`: Codex Independent Reviewの固定Prompt（version管理）
 
 ### Learning
 
