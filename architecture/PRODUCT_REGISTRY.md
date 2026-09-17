@@ -4,6 +4,16 @@ OTOMO COREが認識するProductと、その現在の役割・Repository・状�
 
 Product詳細仕様はここには記載しません。
 
+最終棚卸し: 2026-09-17
+
+## Status Guide
+
+- `Active`: Productとして継続運用中
+- `Active Development`: Repositoryが確定し、実装またはPhase作業が進行中
+- `Planned`: 構想・責務はあるが、実装開始またはRepository確定前
+
+Repositoryの存在とOTOMO CORE Adoptionは別に管理する。Repositoryが存在していても、CORE共通Harnessとの接続・移行が未完了なら、その旨を各Product項目に明記する。
+
 ## Active
 
 ### OTOMO LAB
@@ -22,9 +32,9 @@ Product詳細仕様はここには記載しません。
   - Migration Step 2 complete: common-vs-Product-specific audit recorded and OTOMO LAB-specific rules extracted to `harness/PRODUCT_RULES.md`
   - Migration Step 3 complete: standard local sibling checkout confirmed; duplicated local shared documents reduced to Product-local shims
   - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
-  - Product-specific validation commands will be added after the implementation stack is fixed
+  - Product-specific validation commands are owned by `otomo-lab`
   - Legacy local `sns-growth-os` is not the same Git repository as official `otomo-lab` and is outside automatic migration
-  - Remote Review pilot (Draft, 2026-09-13): `.github/workflows/remote-review.yml` + `scripts/remote-review/` — see `harness/REMOTE_REVIEW.md`
+  - Remote Review pilot is implemented in Product (`.github/workflows/remote-review.yml` + `scripts/remote-review/`); OTOMO CORE側仕様は引き続き Draft / Pilot
 
 ### OTOMO塾
 
@@ -48,16 +58,51 @@ Product詳細仕様はここには記載しません。
 
 NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-teacher`。Repository renameは本ファイルでは決定しない。
 
-## Planned / Reserved
-
 ### OTOMO VOX
 
 - Product ID: `otomo-vox`
-- Status: Planned
-- Repository: Not fixed
+- Repository: `t0t005081114-hue/otomo-vox`
+- Status: Active Development
+- Type: AI PR / Content Transformation Product
 - Responsibility:
   - AI広報
   - Source contentを媒体別の発信内容へ変換する
+  - 発信Packageのための公開投稿収集・構造分析・Pattern候補化を行う
+- Product Specification Owner: `otomo-vox` Repository
+- Current Development State:
+  - Phase 0 `Package Research Feasibility Test` が進行中
+  - 現在の実装・Harness・requirementsは `phase-0/package-research-feasibility` branchに存在
+  - 2026-09-17棚卸し時点で同branchは`main`より3 commits ahead。`main`はInitial commitのみ
+- OTOMO CORE Adoption:
+  - Phase 0 branchの `CLAUDE.md` がOTOMO COREを上位共通基盤として明示
+  - standard local sibling checkoutでCORE shared rulesを直接参照
+  - Product固有Ruleは `harness/PRODUCT_RULES.md` が所有
+  - Product requirements / data boundary / validation / Decision-Failure historyは `otomo-vox` が所有
+  - Registry上のPlanned表記が実態と不一致だったため、2026-09-17のHuman指示による棚卸しでActive Developmentへ更新
+
+### OTOMO COMES
+
+- Product ID: `otomo-comes`
+- Repository: `t0t005081114-hue/otomo-comes`
+- Status: Active Development
+- Type: AI Manager / Internal Management Support Product
+- Responsibility:
+  - AIマネージャー
+  - Task / progress / management support
+  - 判断材料の集約・委譲候補・要フォロー等の支援
+- Product Specification Owner: `otomo-comes` Repository
+- Current Development State:
+  - Product仕様・Acceptance・Accepted Decision・Open IssuesがRepository内に存在
+  - AI開発Harness（`CLAUDE.md` / `AGENTS.md` / `.claude/` / Phase Workflow等）を整備済み
+  - Phase 00 Development Foundationが`main`上で進行し、Next.js / TypeScript / test / CI等の基盤が存在
+  - 最新のPhase 00作業ではclean installの再現性修正まで実施済み
+- OTOMO CORE Adoption:
+  - Repository自体とProduct-local Harnessは稼働している
+  - 2026-09-17棚卸し時点では、`CLAUDE.md`等にOTOMO COREを上位共通基盤として参照する明示的Migrationは確認できない
+  - CORE共通Ruleとの重複監査・責務分離・sibling checkout等の正式Adoptionは未記録
+  - したがってRepository確定 / Active Developmentへの更新と、OTOMO CORE Adoption完了は別扱いとする
+
+## Planned / Reserved
 
 ### OTOMO LOOP
 
@@ -70,14 +115,7 @@ NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-te
   - 市場検証
   - OTOMO LABへのフィードバック
 
-### OTOMO COMES
-
-- Product ID: `otomo-comes`
-- Status: Planned
-- Repository: Not fixed
-- Responsibility:
-  - AIマネージャー
-  - Task / progress / motivation management support
+2026-09-17棚卸し時点で、`t0t005081114-hue` 配下に `otomo-loop` Repositoryは確認できない。
 
 ## Out of Scope
 
