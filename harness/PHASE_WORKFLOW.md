@@ -23,6 +23,7 @@ Phase開始前:
 - 既存責務境界を理由なく変更しない
 - 必要なTestを追加する
 - 重要判断をGitHubへ残す（該当する場合はImplementation Decision Traceを含む）
+- 変更のRisk DriversとReview Assurance Level候補を申告する（`harness/DEVELOPMENT_STANDARDS.md` §5）
 
 ## 3. Validation
 
@@ -49,13 +50,21 @@ OTOMO COREは特定言語・Frameworkのコマンドを強制しない。
 
 の順で行う。
 
-## 4. Independent Review
+## 4. Risk Classification and Independent Review
 
-実装後に独立レビューを行う。
+実装後、変更ごとにriskを分類し、Review Assurance Levelに応じたreview / validationを行う。
+
+Level定義、判定Rule、Levelの引き上げ・引き下げ権限、Levelごとに必要なEvidenceは `harness/DEVELOPMENT_STANDARDS.md` §5 に従う。ここでは繰り返さない。
+
+判定単位は原則 logical change / PR change-unitである。1つのPhase内に複数のLevelが混在してよい。
+
+- L0: 独立レビューを免除し、self-review、Productが定義するValidation、Acceptance確認で判定する。Independent Review Exemptionを記録する
+- L1: Acceptance-critical path / risk-critical diff / 責務境界を中心に独立レビューを行う
+- L2: 対象changeの影響範囲全体に対するFull Independent ReviewとClean-room Verificationを行う
 
 独立レビューは `harness/DEVELOPMENT_STANDARDS.md` の Clean-room Verification / Verification Evidence / Evidence Integrity に従う。
 
-確認項目:
+確認項目（L2は全項目、L1はReview Scope内で該当する項目）:
 
 - requirement fidelity
 - scope creep
@@ -77,6 +86,8 @@ OTOMO COREは特定言語・Frameworkのコマンドを強制しない。
 
 FAILには少なくとも1件のblocking findingが存在する。
 
+L0で行うのは実装担当のself-reviewとValidationであり、その結果を独立レビューのPASSと呼ばない。
+
 ## 5. FAIL Loop
 
 blocking findingがある場合:
@@ -91,7 +102,7 @@ blocking findingがある場合:
 4. 元のFailureに対する回帰Testを追加する
 5. 横展開対象となった関連経路にも、必要な回帰Testまたは明示的な非該当確認を追加する
 6. Validationを再実行する
-7. 独立再レビューを行う
+7. 元の判定Level以上で独立再レビューを行う（blocking findingは当初のRisk分類が実態より低かった可能性を示すため、Review Assurance Levelの再評価を含む）
 8. 必要ならFailureを記録する
 
 1つの分岐だけが直ったことを、Root cause全体の解消とみなさない。
@@ -105,7 +116,9 @@ blockingが0になるまでPhase完了としない。
 - Acceptance Criteria達成
 - 必須Validation PASS
 - blocking finding = 0
-- 独立レビュー判定の根拠となるVerification Evidenceが存在する
+- Phase内の各changeにReview Assurance Levelが割り当てられている
+- 各changeについて、そのLevelが要求するEvidenceが存在する（L0はIndependent Review Exemptionを含む）
+- L1 / L2の対象changeは独立レビューがPASSしている
 - 重要Decision記録済み
 - 重要Failure記録済み
 - Git working stateが理解可能
@@ -119,7 +132,11 @@ blockingが0になるまでPhase完了としない。
 - 変更ファイル
 - Validation結果
 - 独立レビュー結果
-- Independent Verification Environment（対象SHA、環境の分離方法、実装担当環境と共有したもの）
+- Review Assurance Level（Phase内の最高Levelと、review対象changeごとのLevel）
+- Risk Drivers（Levelを決めた根拠。Forced Level 2条件への該当有無を含む）
+- Review Scope（L1で独立監査した範囲）
+- Independent Review Exemption（L0の免除理由とResidual Risk）
+- Independent Verification Environment（Clean-room Verificationを行った場合: 対象SHA、環境の分離方法、実装担当環境と共有したもの）
 - Verification Evidence（command、exit code、結果の安全な要約）
 - blocking残件
 - advisory残件
@@ -127,6 +144,7 @@ blockingが0になるまでPhase完了としない。
 - Rejected Approaches
 - Deliberate Non-Goals
 - Residual Risks
+- Residual Risk from Reduced Review Scope
 - Failure / 再発防止
 - 横展開確認の有無と対象
 - Knowledge昇格候補
