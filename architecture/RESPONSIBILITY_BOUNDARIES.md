@@ -15,6 +15,7 @@ OTOMO COREが正本として管理するもの:
 - 失敗記録フォーマット
 - Knowledge昇格基準
 - Product Registry
+- Lead Agent governance（Trinity上位ルール）
 - Repository構造の共通原則
 - Product横断で有効と承認されたRule / Skill / Hook / Test等
 
