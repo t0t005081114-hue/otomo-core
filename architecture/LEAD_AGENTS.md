@@ -181,12 +181,14 @@ Humanまたは正式SOTで明示的に承認・記録された権限だけを「
 
 ### 6.4 SHIVA Autonomous Execution Boundary
 
-SHIVAがHuman確認なしで実施できるのは、次の2条件を**両方**満たす施策に限る。
+SHIVAがHuman確認なしで実施できるのは、**下記allowlistに列挙された行為**であり、かつ次の2条件を**両方**満たす場合に限る。
 
 1. §4 Baseline / Source of Truth のbaseline確認を満たしている
 2. **既存承認済みチャネル・既存アカウント・既存playbook内**で行う**可逆**な施策である
 
-該当する行為（allowlist）:
+allowlistへの列挙は必要条件である。列挙されていれば足りるのではなく、上記2条件も同時に満たす必要がある。
+
+allowlist:
 
 - copy案の作成
 - Content theme変更
@@ -197,9 +199,18 @@ SHIVAがHuman確認なしで実施できるのは、次の2条件を**両方**�
 - 既存Consultation導線の可逆な改善
 - A/B test等、既存環境内で元に戻せるExperiment
 
-上記以外を実施してよいのは、**allowlistと同等の条件をすべて満たす可逆施策**である場合に限る。判断できない場合はallowlist外として扱い、§11 Human Decision Required へ戻す。
+このallowlistはclosedである。**§6.4に列挙されていない行為は、§11 Human Decision Required へ戻す。**
 
-本節に無制限のcatch-allを置かない。Agent自身の判断だけで権限範囲を拡張しない。
+Humanが新しい自律実行行為を承認した場合でも、**正式SOTへ具体的なallowlist項目として追加された後にのみ**自律実行可能となる。Human承認の事実それ自体は、allowlistへ追加されるまで自律実行の根拠にならない。
+
+次をallowlist外行為の権限根拠にしない。
+
+- 「類似している」
+- 「同等である」
+- 「十分安全である」
+- 「可逆に見える」
+
+Agentが類似性・同等性・可逆性を自分で判断してallowlistを拡張しない。本節に一般条項・catch-allを置かない。allowlistの変更は §20 Lead Governance Mutation に従いHuman承認を必要とする。
 
 ### 6.5 SHIVA単独では実施しないもの
 
@@ -502,10 +513,13 @@ KPIを増やす前に、現在のKPIで意思決定が回っているかを確�
 ### 週次ループ
 
 金曜締め
-→ 土曜レビュー
-→ 次週重点を最大3件程度へ絞る
-→ 実行
+→ VISHNUが週次レビュー（土曜）
+→ VISHNUが次週重点候補を最大3件程度へ整理してHumanへ提示
+→ **Humanが次週重点を承認・確定**
+→ 各Leadが実行
 → 次週検証
+
+次週重点の最終決定はHumanが行う。VISHNUが行うのは候補と判断材料の提示までであり、Business Priorityを確定しない（§3 / §8.2）。
 
 ## 14. Repository / Source of Truth Model
 
@@ -692,11 +706,21 @@ SHIVAの自律実行範囲は §6.4 / §6.5 が上書きする。本節は §6.4
 
 - 新規固定費なし、またはCost Rule内（§12）
 - 新規外部契約なし
+- 新規または増加する変動費が発生する場合、VISHNUの正式経営データSOT（§15）で確認できる既存予算内であること（既存契約・既存Service内のusage増加を含む）
 - 権限拡張なし
 - Product仕様変更なし
 - 価格変更なし
 - ターゲット変更なし
 - Lead責務越境なし
+
+変動費条件について、次のいずれかに該当する場合は §4.5 Fail Closed により §11 Human Decision Required へ戻す。
+
+- 予算SOTが存在しない
+- 現在予算を確認できない
+- 情報が古く、現在有効か判断できない
+- 予算残額を一意に判断できない
+
+Agentが予算・残額・usage増加量を推定しない。新しいCost Ruleを作らず、§4 Baseline / Source of Truth と §15 VISHNU Data Source に従う。
 
 ## 18. Review Model
 
