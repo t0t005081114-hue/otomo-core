@@ -24,6 +24,8 @@ This file is the **Codex Review Entry Point** for `<repository>`. It tells Codex
 
 Read before forming a verdict. List only documents that exist in this repository.
 
+Remote Review adopters: describe the file-backed required documents in a form the Product's Remote Review implementation can parse. The concrete format follows Product-side ownership (`harness/REMOTE_REVIEW.md` §3, §9). This template's numbered list is not a parser-compatible format.
+
 1. <requirements>
 2. <formal specification>
 3. <Acceptance Criteria / implementation plan>
