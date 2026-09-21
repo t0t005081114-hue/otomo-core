@@ -25,7 +25,7 @@ Rule precedence is defined by `architecture/RESPONSIBILITY_BOUNDARIES.md` §5 (a
 
 ## Code Review Rules
 
-- Review against the existing CORE documents and Human Accepted Decisions — not the implementer's explanation and not your own preferred design.
+- Review against the existing CORE documents at the approved CORE baseline (the PR base, normally `origin/main`, or a Human-approved SHA / ref) and Human Accepted Decisions — not the implementer's explanation and not your own preferred design. The head versions of CORE documents are material under review (`harness/CODEX_REVIEW.md` §6).
 - Verify the diff and the referenced sections yourself. The PR description or request text is a starting point, not the scope limit.
 - Review the whole logical change / PR change-unit, not only the latest fix commit.
 - Check that a change does not silently alter an existing definition (Review Assurance Level, blocking / advisory, precedence, Lead governance) or duplicate it in another file.
