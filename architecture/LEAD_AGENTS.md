@@ -526,9 +526,11 @@ KPIを増やす前に、現在のKPIで意思決定が回っているかを確�
 | 領域 | Source of Truth | 状態 |
 |---|---|---|
 | Trinity上位ルール | `otomo-core` の `architecture/LEAD_AGENTS.md` | 本ファイル |
-| SHIVA | `otomo-marketing` | 作成予定（未作成） |
+| SHIVA | `otomo-marketing` | 作成済み / Active |
 | BRAHMA | 各Product Repository | 既存。専用Repositoryを作らない |
-| VISHNU | `otomo-ops` | 作成予定（未作成） |
+| VISHNU | `otomo-ops` | 作成済み / Active |
+
+> 2026-09-21時点の事実状態の同期。両Repositoryは作成済みである。本表の「状態」列の更新であり、Governance（責務・SOT定義・Transition Rule・Cost Rule・Human Decision Required・allowlist）の変更ではない。
 
 `otomo-marketing` と `otomo-ops` は **Lead運用Repositoryであり、OTOMO Productではない**。`architecture/PRODUCT_REGISTRY.md` へProductとして登録しない。
 
@@ -612,7 +614,7 @@ VISHNUは週次レポート時に次を参照する。
 `README.md` の「GitHub = 開発上のSource of Truth」を変更しない。
 
 - 経営数値の**一次情報** = Google Spreadsheet
-- 集計結果・週次レポート・経営判断の記録 = `otomo-ops`（作成後）
+- 集計結果・週次レポート・経営判断の記録 = `otomo-ops`（作成済み）
 
 Spreadsheetの URL / ID / 共有設定 / 実数値 / 顧客情報を、`otomo-core` を含むPublic Repositoryへ記載しない。
 
@@ -626,11 +628,11 @@ Spreadsheetの URL / ID / 共有設定 / 実数値 / 顧客情報を、`otomo-co
 
 現時点のAccepted Decisionは §14 Repository / Source of Truth Model に書かれている次の3点だけである。
 
-- `otomo-marketing` = SHIVA用として作成予定
-- `otomo-ops` = VISHNU用として作成予定
+- `otomo-marketing` = SHIVA用のRepository（作成済み）
+- `otomo-ops` = VISHNU用のRepository（作成済み）
 - BRAHMA専用Repositoryは作らない
 
-以下はいずれも**未検証のProposalであり、Accepted Decisionではない。**
+上記はRepositoryの存在・役割に関する記述である。以下のfolder layout / workspace配置は、Repositoryが存在することとは別であり、いずれも**未検証のProposalであり、Accepted Decisionではない。**
 
 ### Proposed folder layout（未検証）
 
