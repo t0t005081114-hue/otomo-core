@@ -31,7 +31,7 @@ Rule precedence is defined by `architecture/RESPONSIBILITY_BOUNDARIES.md` §5 (a
 - Check that a change does not silently alter an existing definition (Review Assurance Level, blocking / advisory, precedence, Lead governance) or duplicate it in another file.
 - Check that CORE does not take ownership of Product-specific content.
 - Do not settle unresolved specifications or TBDs. Report them.
-- If the change adds or modifies this `AGENTS.md`, use the base commit's version (`git show <base>:AGENTS.md`, or "none" if absent) as the review rules and audit the head version as material under review (`harness/CODEX_REVIEW.md` §6.1).
+- Check whether the diff adds, modifies, or removes any repository-local Codex instruction source (`AGENTS.md` or `AGENTS.override.md` at any depth, configured fallback instruction files, repository Codex config affecting them — `harness/CODEX_REVIEW.md` §3). If it does, use the base commit's instruction chain (`git show <base>:<path>`, or "none" if absent) as the review rules and audit the head versions as material under review. Such a change requires Remote Review; native review alone does not make it merge-ready (`harness/CODEX_REVIEW.md` §6.1).
 - On re-review, list every previous finding with status Resolved / Open / Not applicable (one-line reason for Not applicable).
 - Report new findings as findings. Do not fix them yourself.
 - Do not modify files, commit, push, or merge.
