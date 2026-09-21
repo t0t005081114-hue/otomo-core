@@ -98,21 +98,22 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 
 - OTOMO CORE自身もroot `AGENTS.md` を持つ（CORE repositoryのreview用）
 - 新しく `AGENTS.md` を置くrepositoryは `harness/templates/agents-review-entrypoint.md` を出発点にする。存在しない文書を必須にしない
-- 既に `AGENTS.md` を持つrepository（例: OTOMO LAB）は、本ファイルを理由に書き直さない。導線（Source of Truth一覧・CORE参照・Code Review Rules）が満たされていれば足りる
+- 既にentrypoint（`AGENTS.md` / `CLAUDE.md` 等）を持つrepository（例: OTOMO LAB）は、本ファイルを理由に全面的に書き直す必要はない。ただし、CORE参照方法が下記のapproved CORE baseline ruleと競合するentrypointはnon-compliantであり、migration対象とする。sibling checkoutの現在のHEAD / working treeをauthorityとして読む記述がこれに当たる
+- どのCORE revisionを正式なCORE Harnessとするかは、COREの承認手続きの問題である（`harness/DEVELOPMENT_STANDARDS.md` §8）。Product / Lead固有Ruleであることは、未承認のCORE revisionを正式なHarnessとして使う根拠にならない。本ファイルはmigration requirementだけを定義する。各repositoryのfileはそのrepositoryのfollow-up PRで修正する
 - repository-local instruction sourceはreview-harness fileとして扱う（`AGENTS.md` は `harness/REMOTE_REVIEW.md` §11 に明記）。追加・変更はPRで行い、独立レビューとHuman承認を経る。review時の扱いは §6.1 に従う
 - Remote Reviewを導入済みのrepositoryでは、`AGENTS.md` が必須とする文書とRemote Review manifestの一致を維持する（`harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistency）。sibling checkout上のCORE文書はnative review用のcontextであり、checkout内のfile-backedなSource of Truthではないため、manifestへそのまま要求しない。Remote Reviewのcontextは各Productの `scripts/remote-review/config.json` と同 §9 に従う（例: OTOMO LAB `AGENTS.md` §2）
 - CORE参照の手段はsibling checkout `..\otomo-core` を標準とする。local checkoutは参照手段であり、authorityではない。sibling checkoutが読めることは、その現在のHEADやworking treeを正式なCORE Harnessとして使ってよいことを意味しない
 - native reviewで使うCORE Harnessは、approved CORE baselineから読む（2026-09-22 Human Decision）
-  - 原則: `origin/main`
-  - 例外: Humanが明示的に承認したcommit SHA / ref
+  - approved ref: 原則 `origin/main`。例外はHumanが明示的に承認したcommit SHA / ref
   - 使わないもの: その時点でcheckoutされているfeature branch / 未mergeのPR branch、未commitの変更を含むworking tree、Humanが承認していないlocal branch / commit
-  - 読み方の例: `git -C ..\otomo-core show origin/main:harness/DEVELOPMENT_STANDARDS.md`。working treeのfileを直接読むのは、現在のHEADがapproved baselineと一致し、working treeがcleanであることを確認できた場合に限る
-  - 実際に使ったCORE ref / SHAを、review結果のDurable Historyに記録する
+  - review開始時に、approved refを一度だけimmutableなcommit SHAへresolveする（例: `git -C ..\otomo-core rev-parse origin/main^{commit}`）。以後、そのreviewの間はそのSHAだけを使う。`origin/main` 等のmutable refを途中で再resolveしない
+  - CORE文書は、可能な限りresolveしたSHAから読む（例: `git -C ..\otomo-core show <resolved-SHA>:harness/DEVELOPMENT_STANDARDS.md`）。working treeのfileを直接読むのは、現在のHEADがresolveしたSHAと一致し、working treeがcleanであることを確認できた場合に限る
+  - review結果のDurable Historyには、requested / approved refとresolveしたSHAを記録する。mutable refだけをEvidenceとして記録しない
 - CORE Harnessを参照できるかで扱いを分ける（2026-09-22 Human Decision）
   - approved CORE baselineを読める: そのbaselineのCORE Harnessを使う
   - approved CORE baselineを読めず、repositoryにdocumented fallbackがある: 明示されたfallbackだけを使う。approved baselineを読めなかったことと、使ったfallbackをreview結果に明記する
   - approved CORE baselineを読めず、documented fallbackも無い: 独自に補わず、fail closedとする。CORE Ruleに依存する判定は行わず、Human Decision Required、またはbaseline確認・CORE参照の回復待ちとしてreview結果に明記する
-  - approved baselineを確認できない場合（例: `origin/main` が取得できない、承認されたSHA / refが不明）は「読めない」として扱う
+  - approved baselineをSHAへresolveできない、または確認できない場合（例: `origin/main` が取得できない、承認されたSHA / refが不明）は「読めない」として扱う
   - fallbackの有無やapproved baselineをAgentが推測しない。fallbackを発明しない
 - OTOMO CORE自身をreviewする場合、判定基準はapproved CORE baseline側の文書であり、PR head側のCORE文書は変更対象のmaterialである（§6.1と同じ考え方）
 
