@@ -109,6 +109,63 @@ blocking findingがある場合:
 
 blockingが0になるまでPhase完了としない。
 
+### Remediation / Re-review Protocol
+
+独立レビューでfindingが出た後の remediation → Validation → re-review の進め方を補足する。上記FAIL Loopを置き換えるものではない。Review Assurance Level、blocking / advisory、Clean-room Verification、Evidenceの要求は `harness/DEVELOPMENT_STANDARDS.md` §5 に従い、ここでは変更しない。
+
+#### Same PR / Branch
+
+既存PRに対するfindingのremediationは、原則として同じPR / branchへ追加commitする。
+
+新しいPRへ分離するのは、finding解消にscope expansionまたは独立したlogical changeが必要な場合に限る。その場合も実装担当が独断で分離せず、Scope判断としてHumanへ戻す（`harness/DEVELOPMENT_STANDARDS.md` §1 / §3）。
+
+#### Minimal Remediation
+
+remediationで修正するのは次に限る。
+
+- findingのRoot cause
+- 上記FAIL Loopで、同じRoot causeの影響が確認された関連経路
+- 必要な回帰Test / Validation
+
+unrelated cleanup、ついでのrefactor、新Feature追加、未決定仕様の確定をremediationに含めない。
+
+「最小修正」はRoot causeの横展開確認を省略する意味ではない。FAIL Loopの手順2・3・5は、そのまま適用する。
+
+#### Re-review Scope
+
+re-reviewはfix commitだけを見て完了としない。元のfindingが属するlogical change / PR change-unitを再確認し、少なくとも次を確認する。
+
+- previous findingが解消したか
+- remediationによるregressionが無いか
+- 元のAcceptance Criteriaと責務境界が維持されているか
+
+re-reviewのLevelは上記FAIL Loop手順7と `harness/DEVELOPMENT_STANDARDS.md` §5 に従う。
+
+#### Finding Trace
+
+re-reviewでは、previous findingsそれぞれについて最低限以下を追跡可能にする。
+
+- Finding ID / summary
+- status: Resolved / Open / Not applicable
+
+Not applicableとする場合は、その理由を一行で残す。記録先は `harness/DEVELOPMENT_STANDARDS.md` §4 Durable History に従う。`/codex:review` を使う場合は同 §5 Codex Review Durable History に従う。
+
+#### New Finding Stop Rule
+
+re-reviewで、今回のremediation roundが対象としたfinding・Root cause・関連経路に含まれない新しいfindingが見つかった場合、実装担当は次のremediation roundへ自動的に進まない。次を行って停止する。
+
+1. findingをDurable Historyへ保存する
+2. severity（blocking / advisory）、location、issueを整理する
+3. previous findingsのstatusを明示する
+4. 解消にscope expansionが必要かを整理する
+5. Humanへ報告する
+
+次のroundのremediationは、Humanが承認してから開始する。
+
+re-reviewで元findingのRoot causeが未解消と判明しただけの場合も、実装担当は独断で修正範囲を広げない。必要な修正範囲を整理してHumanへ報告する。
+
+本Ruleはremediationの進行を止めるものであり、blocking findingのPhase完了への扱いを変えない。blockingが0になるまでPhase完了としない点は上記のとおりである。
+
 ## 6. Phase Completion
 
 最低完了条件:
