@@ -325,6 +325,17 @@ L2を満たす実行手段を1つに固定しない。`harness/REMOTE_REVIEW.md`
 
 Phase完了を妨げない改善候補。必要に応じて将来対応する。
 
+### Codex Review Durable History
+
+`/codex:review` を実施する変更は、AI conversationだけにreview結果を残さない。
+
+- 原則として commit・push・PR作成まで行う
+- Codex review結果は、対象PRのConversationまたはReviewへDurable Historyとして保存する（Evidence Integrityに従い、絶対パス・機密等はsanitizeする）
+- Findingを修正した場合は、同じPRへ追加commitし、再review結果もPRへ保存する
+- `/codex:review` 実行者はPRをmergeしない。mergeはHumanの明示承認後にのみ行う
+
+本節は記録と権限の運用であり、Review Assurance Levelやblocking / advisoryの判定基準を変更しない。
+
 ### Clean-room Verification
 
 L2では必須とする。L1ではescalation条件に該当する場合に行う。L0では要求しない。
