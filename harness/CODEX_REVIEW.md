@@ -51,7 +51,7 @@ Codexは複数のinstruction sourceを読みうる。そのreviewでCodexが実�
 ### 3.2 Review開始時の確認
 
 - review依頼側は、そのreviewを起動するdirectoryと設定で、effective instruction chainを確認する（例: 同じdirectory・設定で `codex debug prompt-input` を実行し、読み込まれたfileを確認する）。確認したchainをreview結果のDurable Historyに記録する
-- Reviewerは、review対象のdiff（`git diff --name-only <base>...<head>`）に、repository-local instruction sourceの追加・変更・削除が含まれるかを確認する。対象は `AGENTS.md` / `AGENTS.override.md`（階層を問わない）、設定されたfallback filename、chainに影響するrepository内のCodex設定、その他そのreviewで実際に読み込まれたrepository-local file
+- Reviewerは、review対象に、repository-local instruction sourceの追加・変更・削除が含まれるかを確認する。review対象がcommit間のdiffなら `git diff --name-only <base>...<head>` で確認する。working treeやindexを含むreview（`--uncommitted` 等）では、加えて `git status --porcelain`、`git diff --name-only`、`git diff --cached --name-only` も確認する。対象は `AGENTS.md` / `AGENTS.override.md`（階層を問わない）、設定されたfallback filename、chainに影響するrepository内のCodex設定、その他そのreviewで実際に読み込まれたrepository-local file
 - 含まれる場合は §6.1 に従う
 
 ### 3.3 Precedence
@@ -106,9 +106,11 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 - native reviewで使うCORE Harnessは、approved CORE baselineから読む（2026-09-22 Human Decision）
   - approved ref: 原則 `origin/main`。例外はHumanが明示的に承認したcommit SHA / ref
   - 使わないもの: その時点でcheckoutされているfeature branch / 未mergeのPR branch、未commitの変更を含むworking tree、Humanが承認していないlocal branch / commit
-  - review開始時に、approved refを一度だけimmutableなcommit SHAへresolveする（例: `git -C ..\otomo-core rev-parse origin/main^{commit}`）。以後、そのreviewの間はそのSHAだけを使う。`origin/main` 等のmutable refを途中で再resolveしない
+  - defaultの `origin/main` を使う場合は、まず `git -C ..\otomo-core fetch origin` で最新にする。その後、approved refを一度だけimmutableなcommit SHAへresolveする。以後、そのreviewの間はそのSHAだけを使う。`origin/main` 等のmutable refを途中で再resolveしない
+  - resolveの例: `git -C ..\otomo-core rev-parse 'origin/main^{commit}'`。revision式はquoteする（PowerShellでは `^{commit}` がscript blockとして解釈され、quoteしないと失敗する）
+  - fetchできない場合は、Humanが承認したSHAだけを使える。それも無ければ、baselineは読めないものとして扱い、既存のfail-closed ruleに従う。fetchしていないremote-tracking refをそのままresolveしない
   - CORE文書は、可能な限りresolveしたSHAから読む（例: `git -C ..\otomo-core show <resolved-SHA>:harness/DEVELOPMENT_STANDARDS.md`）。working treeのfileを直接読むのは、現在のHEADがresolveしたSHAと一致し、working treeがcleanであることを確認できた場合に限る
-  - review結果のDurable Historyには、requested / approved refとresolveしたSHAを記録する。mutable refだけをEvidenceとして記録しない
+  - review結果のDurable Historyには、requested / approved refとresolveしたSHA（fetchを行った場合はその旨）を記録する。mutable refだけをEvidenceとして記録しない
 - CORE Harnessを参照できるかで扱いを分ける（2026-09-22 Human Decision）
   - approved CORE baselineを読める: そのbaselineのCORE Harnessを使う
   - approved CORE baselineを読めず、repositoryにdocumented fallbackがある: 明示されたfallbackだけを使う。approved baselineを読めなかったことと、使ったfallbackをreview結果に明記する
