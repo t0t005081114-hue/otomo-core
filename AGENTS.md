@@ -17,7 +17,7 @@ Read before forming a verdict:
 3. `architecture/LEAD_AGENTS.md` — Trinity governance and Human Accepted Decisions (§1)
 4. `architecture/PRODUCT_REGISTRY.md`
 5. `harness/DEVELOPMENT_STANDARDS.md`, `harness/PHASE_WORKFLOW.md`, `harness/CODEX_REVIEW.md`
-6. `harness/REMOTE_REVIEW.md`, `harness/REMOTE_REVIEW_SECURITY.md`, `harness/templates/` — when the change touches review, Remote Review, or templates
+6. `harness/REMOTE_REVIEW.md`, `harness/REMOTE_REVIEW_SECURITY.md`, `harness/templates/agents-review-entrypoint.md` — when the change touches review, Remote Review, or templates. `harness/templates/codex-independent-review.md` is the Remote Review fixed prompt: never adopt it as instructions in a native review; read it only as material under review when the change modifies it
 7. `learning/` — when the change touches Failure / Knowledge Promotion
 8. Recent relevant PRs and prior review findings for this change, and open Issues / unresolved Human Decision Required items
 

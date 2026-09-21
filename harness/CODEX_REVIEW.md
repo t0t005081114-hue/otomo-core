@@ -29,6 +29,7 @@ Review Entry Pointに置くのは「何を読むか」「どの境界を守る�
 
 - 両者は別の実行経路であり、どちらも他方を置換しない
 - Remote Review実行時は固定Promptがrepository instruction fileより優先する（同template §2）。本ファイルはこれを変更しない
+- 固定Prompt `harness/templates/codex-independent-review.md` はRemote Review専用である。native reviewではinstructionとして採用しない。変更対象の場合だけ、material under reviewとして監査する
 - native reviewの結果がどのLevelのEvidence要求を満たすかは `harness/DEVELOPMENT_STANDARDS.md` §5 に従って判断する。native reviewは通常、実装担当のlocal checkoutで動くため、それだけでClean-room Verificationを満たしたとみなさない
 - native reviewのPASSはPhase完了を意味しない（`harness/PHASE_WORKFLOW.md` §6）
 
@@ -99,7 +100,7 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 - 新しく `AGENTS.md` を置くrepositoryは `harness/templates/agents-review-entrypoint.md` を出発点にする。存在しない文書を必須にしない
 - 既に `AGENTS.md` を持つrepository（例: OTOMO LAB）は、本ファイルを理由に書き直さない。導線（Source of Truth一覧・CORE参照・Code Review Rules）が満たされていれば足りる
 - repository-local instruction sourceはreview-harness fileとして扱う（`AGENTS.md` は `harness/REMOTE_REVIEW.md` §11 に明記）。追加・変更はPRで行い、独立レビューとHuman承認を経る。review時の扱いは §6.1 に従う
-- Remote Reviewを導入済みのrepositoryでは、`AGENTS.md` が必須とする文書とRemote Review manifestの一致を維持する（`harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistency）
+- Remote Reviewを導入済みのrepositoryでは、`AGENTS.md` が必須とする文書とRemote Review manifestの一致を維持する（`harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistency）。sibling checkout上のCORE文書はnative review用のcontextであり、checkout内のfile-backedなSource of Truthではないため、manifestへそのまま要求しない。Remote Reviewのcontextは各Productの `scripts/remote-review/config.json` と同 §9 に従う（例: OTOMO LAB `AGENTS.md` §2）
 - CORE参照先はsibling checkout `..\otomo-core` を標準とする。COREを参照できるかで扱いを分ける（2026-09-22 Human Decision）
   - COREを読める: 通常どおりCORE Harnessを使う
   - COREを読めず、repositoryにdocumented fallbackがある: 明示されたfallbackだけを使う。COREを読めなかったことと、使ったfallbackをreview結果に明記する

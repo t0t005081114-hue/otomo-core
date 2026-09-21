@@ -30,7 +30,7 @@ Read before forming a verdict. List only documents that exist in this repository
 4. <Product- or Lead-specific rules>
 5. <decisions / failures / phase records>
 6. Recent relevant PRs and prior review findings for this change, and unresolved blocking issues / Human Decision Required items
-7. OTOMO CORE Harness (sibling checkout `..\otomo-core`):
+7. OTOMO CORE Harness (sibling checkout `..\otomo-core`) — **native review context only**. These files are outside this checkout and are not file-backed Source of Truth for Remote Review; do not add them to the Remote Review context manifest. Remote Review context follows `scripts/remote-review/config.json` and `harness/REMOTE_REVIEW.md` §9:
    - `harness/CODEX_REVIEW.md` — native review entry point
    - `harness/DEVELOPMENT_STANDARDS.md`
    - `harness/PHASE_WORKFLOW.md`
