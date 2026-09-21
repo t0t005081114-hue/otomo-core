@@ -526,9 +526,11 @@ KPIを増やす前に、現在のKPIで意思決定が回っているかを確�
 | 領域 | Source of Truth | 状態 |
 |---|---|---|
 | Trinity上位ルール | `otomo-core` の `architecture/LEAD_AGENTS.md` | 本ファイル |
-| SHIVA | `otomo-marketing` | 作成予定（未作成） |
+| SHIVA | `otomo-marketing` | 作成済み / Active |
 | BRAHMA | 各Product Repository | 既存。専用Repositoryを作らない |
-| VISHNU | `otomo-ops` | 作成予定（未作成） |
+| VISHNU | `otomo-ops` | 作成済み / Active |
+
+> 2026-09-21時点の事実状態の同期。両Repositoryは作成済みである。本表の「状態」列の更新であり、Governance（責務・SOT定義・Transition Rule・Cost Rule・Human Decision Required・allowlist）の変更ではない。
 
 `otomo-marketing` と `otomo-ops` は **Lead運用Repositoryであり、OTOMO Productではない**。`architecture/PRODUCT_REGISTRY.md` へProductとして登録しない。
 
