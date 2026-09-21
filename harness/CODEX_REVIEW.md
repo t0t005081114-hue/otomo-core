@@ -53,6 +53,14 @@ Codexは複数のinstruction sourceを読みうる。そのreviewでCodexが実�
 - review依頼側は、そのreviewを起動するdirectoryと設定で、effective instruction chainを確認する（例: 同じdirectory・設定で `codex debug prompt-input` を実行し、読み込まれたfileを確認する）。確認したchainをreview結果のDurable Historyに記録する
 - Reviewerは、review対象に、repository-local instruction sourceの追加・変更・削除が含まれるかを確認する。review対象がcommit間のdiffなら `git diff --name-only <base>...<head>` で確認する。working treeやindexを含むreview（`--uncommitted` 等）では、加えて `git status --porcelain`、`git diff --name-only`、`git diff --cached --name-only` も確認する。対象は `AGENTS.md` / `AGENTS.override.md`（階層を問わない）、設定されたfallback filename、chainに影響するrepository内のCodex設定、その他そのreviewで実際に読み込まれたrepository-local file
 - 含まれる場合は §6.1 に従う
+- Reviewerは、changed pathごとに、そのpathに適用されるrepository-local instruction sourceを確認する。review開始directoryのeffective instruction chainだけに依存しない。Codexはcwdより下のdirectoryのfileを読まないため、repository rootからreviewを起動すると、変更対象pathのscopeにある未変更のnested instruction fileがchainに入らない場合がある（例: `src/AGENTS.md` は、rootから起動したreviewでは読まれないが、`src/feature.ts` には適用される）。手順:
+  1. review対象のchanged pathを列挙する（commit間diffなら `git diff --name-only <base>...<head>`、working tree / indexを含むreviewでは上記のコマンドも使う）
+  2. 各changed pathについて、そのfileのdirectoryからrepository rootまで、ancestor directoryを辿る
+  3. 各directoryで、§3.1のselection behaviorに従い、`AGENTS.override.md`、なければ `AGENTS.md`、どちらも無ければ設定されたfallback filenameを確認する
+  4. changed pathに適用されるが、review開始時のeffective instruction chainに含まれていないfileを、review contextとして読む
+  5. そのfile自体が変更されている場合は §6.1 に従う（trustの扱い）。変更されていない場合は、そのrepositoryの通常のreview contextとして扱う（適用されるrepository-local ruleを見落とさないための確認であり、trustの問題ではない）
+  6. instruction fileが存在することだけでは、その記述の優先順位は変わらない。precedenceは §3.3 のとおり
+  - 確認したchanged pathと、追加で読んだinstruction fileを、review結果のDurable Historyに記録する。該当が無ければ「追加なし」でよい
 
 ### 3.3 Precedence
 
