@@ -614,7 +614,7 @@ VISHNUは週次レポート時に次を参照する。
 `README.md` の「GitHub = 開発上のSource of Truth」を変更しない。
 
 - 経営数値の**一次情報** = Google Spreadsheet
-- 集計結果・週次レポート・経営判断の記録 = `otomo-ops`（作成後）
+- 集計結果・週次レポート・経営判断の記録 = `otomo-ops`（作成済み）
 
 Spreadsheetの URL / ID / 共有設定 / 実数値 / 顧客情報を、`otomo-core` を含むPublic Repositoryへ記載しない。
 
@@ -628,11 +628,11 @@ Spreadsheetの URL / ID / 共有設定 / 実数値 / 顧客情報を、`otomo-co
 
 現時点のAccepted Decisionは §14 Repository / Source of Truth Model に書かれている次の3点だけである。
 
-- `otomo-marketing` = SHIVA用として作成予定
-- `otomo-ops` = VISHNU用として作成予定
+- `otomo-marketing` = SHIVA用のRepository（作成済み）
+- `otomo-ops` = VISHNU用のRepository（作成済み）
 - BRAHMA専用Repositoryは作らない
 
-以下はいずれも**未検証のProposalであり、Accepted Decisionではない。**
+上記はRepositoryの存在・役割に関する記述である。以下のfolder layout / workspace配置は、Repositoryが存在することとは別であり、いずれも**未検証のProposalであり、Accepted Decisionではない。**
 
 ### Proposed folder layout（未検証）
 
