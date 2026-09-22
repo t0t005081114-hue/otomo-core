@@ -111,7 +111,7 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 - Remote Reviewを導入済みのrepositoryでは、`AGENTS.md` が必須とする文書とRemote Review manifestの一致を維持する（`harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistency）。sibling checkout上のCORE文書はnative review用のcontextであり、checkout内のfile-backedなSource of Truthではないため、manifestへそのまま要求しない。Remote Reviewのcontextは各Productの `scripts/remote-review/config.json` と同 §9 に従う（例: OTOMO LAB `AGENTS.md` §2）
 - CORE Harnessの参照（sibling checkoutの位置づけ、approved CORE baseline、SHAへのresolve、CORE unavailable時のfallback / fail closed、OTOMO CORE自身のreview）は `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline に従う。本ファイルは再定義しない。native reviewでの適用:
   - native reviewはlocal checkoutで動くため、sibling checkout上のCOREを、review開始時にresolveしたSHAから読む
-  - Review Entry Point（template・各repositoryの `AGENTS.md`）がCORE availabilityの扱いとして本節を参照している場合も、上記の正本に従う
+  - Review Entry Point（各repositoryの `AGENTS.md`。template 1.0.0から作ったもの等）がCORE availabilityの扱いとして本節を参照している場合も、上記の正本に従う
   - OTOMO CORE自身をnative reviewする場合は、resolveしたbase SHAを `codex review --base <resolved-SHA>` のように渡すと、mutable refを途中で再resolveせずに済む（例）
 
 ### 6.1 Instruction Sourceを変更するchange

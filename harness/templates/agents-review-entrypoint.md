@@ -1,16 +1,16 @@
 <!--
 template: agents-review-entrypoint
-version: 1.0.0
+version: 1.1.0
 source-of-truth: t0t005081114-hue/otomo-core harness/templates/agents-review-entrypoint.md
 guidance: harness/CODEX_REVIEW.md
 Copy to the repository root as AGENTS.md and fill in the <...> placeholders.
 Delete this comment block and any line that does not apply. Do not list documents that do not exist.
-Keep the file a router: link to Source of Truth, do not restate it.
+Keep the file a router: link to Source of Truth, do not restate it. Put only repository-specific review deltas in this file.
 -->
 
 # AGENTS.md
 
-This file is the **Codex Review Entry Point** for `<repository>`. It tells Codex what to read and which boundaries apply. It is a router, not a Source of Truth, and it does not override any document it links to.
+This file is the **Codex Review Entry Point** for `<repository>`. It tells Codex what to read, where each review rule is owned, and what is specific to reviewing this repository. It is a router, not a Source of Truth: it does not define or override any rule in the documents it links to.
 
 `CLAUDE.md` is the Claude Code entrypoint for implementation / operation. This file governs Codex review. Shared rules are owned by the Source of Truth and the OTOMO CORE Harness, not by either entrypoint.
 
@@ -32,34 +32,29 @@ Remote Review adopters: describe the file-backed required documents in a form th
 4. <Product- or Lead-specific rules>
 5. <decisions / failures / phase records>
 6. Recent relevant PRs and prior review findings for this change, and unresolved blocking issues / Human Decision Required items
-7. OTOMO CORE Harness (sibling checkout `..\otomo-core`) — **native review context only**. Read it from the approved CORE baseline: the approved ref (`origin/main`, or a commit SHA / ref the Human explicitly approved) resolved **once** at review start to a commit SHA. For the default `origin/main`: run `git -C ..\otomo-core fetch origin` first, then resolve, e.g. `git -C ..\otomo-core rev-parse 'origin/main^{commit}'` (quote the revision; unquoted `^{commit}` fails in PowerShell). If fetch is not possible, only a Human-approved SHA may be used; otherwise treat the baseline as unreadable. Use only that SHA for the whole review (`git -C ..\otomo-core show <resolved-SHA>:<path>`); do not re-resolve the ref mid-review. Never use a checked-out feature / unmerged PR branch, uncommitted edits, or an unapproved local commit; the local checkout is a way to read CORE, not an authority. Record the approved ref and the resolved SHA in the review's Durable History. These files are outside this checkout and are not file-backed Source of Truth for Remote Review; do not add them to the Remote Review context manifest. Remote Review context follows `scripts/remote-review/config.json` and `harness/REMOTE_REVIEW.md` §9:
+7. OTOMO CORE Harness (sibling checkout `..\otomo-core`) — **native review context only**. Read it from the approved CORE baseline as defined in `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline (native application: `harness/CODEX_REVIEW.md` §6). These files are outside this checkout and are not file-backed Source of Truth for Remote Review; do not add them to the Remote Review context manifest (`harness/CODEX_REVIEW.md` §6):
    - `harness/CODEX_REVIEW.md` — native review entry point
    - `harness/DEVELOPMENT_STANDARDS.md`
    - `harness/PHASE_WORKFLOW.md`
    - `architecture/RESPONSIBILITY_BOUNDARIES.md`
    - <Lead repositories: `architecture/LEAD_AGENTS.md`>
 
-How to handle OTOMO CORE availability (`harness/CODEX_REVIEW.md` §6):
+If the approved CORE baseline cannot be read, resolved, or confirmed, follow `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline (documented fallback only; otherwise fail closed). Documented fallback for this repository: <name it, or delete this line if none exists>.
 
-- The approved CORE baseline is readable: use the CORE Harness from that baseline.
-- The approved CORE baseline is not readable (or cannot be resolved / confirmed) and this repository documents a fallback: <name the documented fallback, or delete this line if none exists>. Use only that fallback, and state in the review that the approved baseline could not be read and which fallback was used.
-- The approved CORE baseline is not readable (or cannot be resolved / confirmed) and no fallback is documented: fail closed. Do not substitute your own rules; make no judgement that depends on CORE rules, and report it as Human Decision Required / waiting for baseline confirmation or CORE access.
-- Never assume or invent a fallback or an approved baseline that is not documented / approved.
+Rule precedence is defined by OTOMO CORE (`architecture/RESPONSIBILITY_BOUNDARIES.md` §5; Lead repositories also `architecture/LEAD_AGENTS.md` §19). Listing a document here gives it no extra authority. Conflicts are reported with their precedence level, not resolved by the reviewer (`harness/CODEX_REVIEW.md` §3.3).
 
-Rule precedence is defined by OTOMO CORE (`architecture/RESPONSIBILITY_BOUNDARIES.md` §5; Lead repositories also `architecture/LEAD_AGENTS.md` §19). Listing a document here gives it no extra authority. If you find a conflict, report which precedence level each side belongs to and do not resolve it yourself.
+## Review Routing
 
-## Code Review Rules
+Review rules are owned by the OTOMO CORE Harness (read from the approved CORE baseline) and this repository's Source of Truth. This file does not restate them.
 
-- Review against the approved requirements, specification, and Acceptance Criteria — not the implementer's explanation and not your own preferred implementation.
-- Verify the diff and the Source of Truth yourself. The PR description, Review Handoff, or request text is a starting point, not the scope limit.
-- Review the whole logical change / PR change-unit, not only the latest fix commit.
-- Do not settle unresolved specifications or TBDs. Report them as findings or open questions.
-- Check responsibility boundaries (OTOMO CORE vs repository; Product vs Lead).
-- On re-review, list every previous finding with status Resolved / Open / Not applicable (one-line reason for Not applicable).
-- Report new findings as findings. Do not fix them yourself.
-- Check whether the diff adds, modifies, or removes any repository-local Codex instruction source (`AGENTS.md` or `AGENTS.override.md` at any depth, configured fallback instruction files, repository Codex config affecting them — `harness/CODEX_REVIEW.md` §3). If it does, use the base commit's instruction chain (`git show <base>:<path>`, or "none" if absent) as the review rules and audit the head versions as material under review. Native review cannot fully separate trust in this case (the head files are still loaded): state that as a residual risk. If Remote Review is already available in this repository, prefer it; its absence alone is not a blocking finding (`harness/CODEX_REVIEW.md` §6.1).
-- Do not modify files, commit, push, or merge.
-- Never output secrets, credentials, tokens, personal data, or environment variable values.
-- Severity (blocking / advisory), Review Assurance Level, Durable History, and the remediation / re-review flow follow the OTOMO CORE Harness (`harness/CODEX_REVIEW.md` §4).
+- General review policy — review criteria, TBD handling, Review Handoff and scope, Review Assurance Level, Finding and severity (blocking / advisory), Durable History, Evidence Integrity, reviewer permissions: `harness/DEVELOPMENT_STANDARDS.md` (§1–§5)
+- Review lifecycle — review unit, remediation, re-review scope, Finding Trace, New Finding Stop Rule, completion: `harness/PHASE_WORKFLOW.md` (§4–§6)
+- Native Codex mechanics — effective instruction chain, changed-path instruction applicability, instruction-source changes and trusted baseline, self-reference residual risk: `harness/CODEX_REVIEW.md` (§3, §6.1)
+- Reviewer conduct, topic by topic, with the owning section of each rule: `harness/CODEX_REVIEW.md` §4
+- Responsibility boundaries and precedence: `architecture/RESPONSIBILITY_BOUNDARIES.md` <Lead repositories: and `architecture/LEAD_AGENTS.md`; Lead review model: `harness/CODEX_REVIEW.md` §7>
+- If the diff adds, modifies, or removes a repository-local Codex instruction source (including this file), apply `harness/CODEX_REVIEW.md` §3.2 and §6.1 before forming a verdict.
+- Never output secrets, credentials, tokens, personal data, or environment variable values (`harness/DEVELOPMENT_STANDARDS.md` §5 Evidence Integrity).
 
-<Optional: repository-specific review focus, one line per item, linking to the rule that defines it.>
+## Repository-specific Review Focus
+
+<Optional: repository-specific review focus / deltas only, one line per item, linking to the repository rule that defines it. Do not restate CORE rules here.>
