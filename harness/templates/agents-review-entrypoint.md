@@ -32,7 +32,12 @@ Remote Review adopters: describe the file-backed required documents in a form th
 4. <Product- or Lead-specific rules>
 5. <decisions / failures / phase records>
 6. Recent relevant PRs and prior review findings for this change, and unresolved blocking issues / Human Decision Required items
-7. OTOMO CORE Harness (sibling checkout `..\otomo-core`) — **native review context only**. Read it from the approved CORE baseline as defined in `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline (native application: `harness/CODEX_REVIEW.md` §6). These files are outside this checkout and are not file-backed Source of Truth for Remote Review; do not add them to the Remote Review context manifest (`harness/CODEX_REVIEW.md` §6):
+7. OTOMO CORE Harness (sibling checkout `..\otomo-core`) — **native review context only**. Read it from the approved CORE baseline as defined in `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline (native application: `harness/CODEX_REVIEW.md` §6). Bootstrap, so you can reach §7 itself safely (§7 stays the authority for everything else):
+   - The default approved ref is `origin/main`. When using it, run `git -C ..\otomo-core fetch origin` first.
+   - At review start, resolve the approved ref **once** to a commit SHA (e.g. `git -C ..\otomo-core rev-parse 'origin/main^{commit}'`; keep the quotes in PowerShell) and read CORE documents only from that SHA for the whole review (`git -C ..\otomo-core show <resolved-SHA>:<path>`). Do not use the checked-out branch or working tree as the baseline.
+   - If fetch is not possible, only a Human-approved SHA may be used. If the approved baseline cannot be established, do not substitute another revision: use only the documented fallback below, otherwise fail closed.
+
+   These files are outside this checkout and are not file-backed Source of Truth for Remote Review; do not add them to the Remote Review context manifest (`harness/CODEX_REVIEW.md` §6):
    - `harness/CODEX_REVIEW.md` — native review entry point
    - `harness/DEVELOPMENT_STANDARDS.md`
    - `harness/PHASE_WORKFLOW.md`
