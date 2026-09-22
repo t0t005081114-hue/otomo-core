@@ -52,6 +52,9 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 - `harness/REMOTE_REVIEW_SECURITY.md`: Remote ReviewのSecurity Policy（Draft / Human承認前）
 - `harness/REMOTE_REVIEW_SETUP.md`: Self-hosted Runner登録など、人間が行うRemote Review Setup手順
 - `harness/templates/codex-independent-review.md`: Codex Independent Reviewの固定Prompt（version管理）
+- `harness/CODEX_REVIEW.md`: native Codex review（`/review` / `/codex:review`）を `AGENTS.md` 経由でrepository Source of TruthとCORE Harnessへ接続するReview Entry Point
+- `harness/templates/agents-review-entrypoint.md`: Product / Lead repository向けの最小 `AGENTS.md` template
+- `AGENTS.md`: 本repository（OTOMO CORE）自身のCodex Review Entry Point
 
 ### Learning
 
