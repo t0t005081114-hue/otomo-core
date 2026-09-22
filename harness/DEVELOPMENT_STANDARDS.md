@@ -305,16 +305,19 @@ L2を満たす実行手段を1つに固定しない。`harness/REMOTE_REVIEW.md`
 
 ### Finding
 
-Findingは、独立レビューまたはself-reviewで指摘された、requirement・正式仕様・Acceptance Criteria・Harnessに対する問題または改善点である。本節と次節（blocking / advisory）がFindingの定義とseverityの正本であり、他のCORE文書・adapter・runtimeは参照し、再定義しない。Findingのlifecycle（remediation、re-review、Finding Trace、New Finding Stop Rule、Phase完了との関係）は `harness/PHASE_WORKFLOW.md` §5 / §6 が所有する。
+Findingは、独立レビューまたはself-reviewで指摘された、requirement・正式仕様・Acceptance Criteria・Product固有Rule・Harness等、適用されるSource of Truthに対する問題または改善点である。どのSource of Truthが優先するかは `architecture/RESPONSIBILITY_BOUNDARIES.md` §5 のRule Precedenceに従い、本節はこれを変更しない。本節と次節（blocking / advisory）がFindingの定義とseverityの正本であり、他のCORE文書・adapter・runtimeは参照し、再定義しない。Findingのlifecycle（remediation、re-review、Finding Trace、New Finding Stop Rule、Phase完了との関係）は `harness/PHASE_WORKFLOW.md` §5 / §6 が所有する。
 
-Findingは、少なくとも次を識別できるように記録する。これは `harness/PHASE_WORKFLOW.md` §5 のFinding Trace / New Finding Stop Ruleがすでに要求している情報を一か所にまとめたものであり、新しい必須項目を追加するものではない。
+Findingを追跡するときに用いる情報の用語は次のとおりである。本節は全Findingへ一律の必須記録項目を定めない。どの場面で何を必須とするかは、既存のlifecycle上の要求（`harness/PHASE_WORKFLOW.md` §5）のとおりである。
 
 - Finding ID / summary
 - severity（blocking / advisory）
 - location
 - issue
+- status（Resolved / Open / Not applicable）
 
-Product・review runtimeは、これに加えて項目（例: Why it matters、Requirement / Rule、Recommended remediation）を要求してよい。
+参考: `harness/PHASE_WORKFLOW.md` §5 は、Finding Traceでは previous findingごとの Finding ID / summary と status（Not applicableの場合はその理由）を、New Finding Stop Ruleでは新しいfindingの severity・location・issue、previous findingsのstatus、scope expansionの要否を求めている。
+
+Product・review runtimeは、独自の項目（例: Why it matters、Requirement / Rule、Recommended remediation）を要求してよい。
 
 ### blocking / advisory
 

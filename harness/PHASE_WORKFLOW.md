@@ -141,7 +141,7 @@ re-reviewのLevelは上記FAIL Loop手順7と `harness/DEVELOPMENT_STANDARDS.md`
 
 #### Finding Trace
 
-re-reviewでは、previous findingsそれぞれについて最低限以下を追跡可能にする。Finding自体の定義・severity・最低限の記録項目は `harness/DEVELOPMENT_STANDARDS.md` §5 Finding / blocking / advisory が所有し、本節はlifecycle上のstatusを扱う。
+re-reviewでは、previous findingsそれぞれについて最低限以下を追跡可能にする。Finding自体の定義とseverityは `harness/DEVELOPMENT_STANDARDS.md` §5 Finding / blocking / advisory が所有する。本節は、lifecycle上で追跡する情報とstatusを定める。
 
 - Finding ID / summary
 - status: Resolved / Open / Not applicable
@@ -153,7 +153,7 @@ Not applicableとする場合は、その理由を一行で残す。記録先は
 re-reviewで、今回のremediation roundが対象としたfinding・Root cause・関連経路に含まれない新しいfindingが見つかった場合、実装担当は次のremediation roundへ自動的に進まない。次を行って停止する。
 
 1. findingをDurable Historyへ保存する
-2. `harness/DEVELOPMENT_STANDARDS.md` §5 Findingの記録項目（severity（blocking / advisory）、location、issueを含む）を整理する
+2. severity（blocking / advisory）、location、issueを整理する（用語は `harness/DEVELOPMENT_STANDARDS.md` §5 Finding）
 3. previous findingsのstatusを明示する
 4. 解消にscope expansionが必要かを整理する
 5. Humanへ報告する
