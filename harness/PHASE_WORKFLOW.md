@@ -58,9 +58,7 @@ Level定義、判定Rule、Levelの引き上げ・引き下げ権限、Levelご�
 
 判定単位は原則 logical change / PR change-unitである。1つのPhase内に複数のLevelが混在してよい。
 
-- L0: 独立レビューを免除し、self-review、Productが定義するValidation、Acceptance確認で判定する。Independent Review Exemptionを記録する
-- L1: Acceptance-critical path / risk-critical diff / 責務境界を中心に独立レビューを行う
-- L2: 対象changeの影響範囲全体に対するFull Independent ReviewとClean-room Verificationを行う
+各Level（L0 / L1 / L2）で行うreview・Validation・Evidenceは `harness/DEVELOPMENT_STANDARDS.md` §5 Review Assurance Level と各Levelの節に従う。
 
 独立レビューは `harness/DEVELOPMENT_STANDARDS.md` の Clean-room Verification / Verification Evidence / Evidence Integrity に従う。
 
@@ -143,7 +141,7 @@ re-reviewのLevelは上記FAIL Loop手順7と `harness/DEVELOPMENT_STANDARDS.md`
 
 #### Finding Trace
 
-re-reviewでは、previous findingsそれぞれについて最低限以下を追跡可能にする。
+re-reviewでは、previous findingsそれぞれについて最低限以下を追跡可能にする。Finding自体の定義とseverityは `harness/DEVELOPMENT_STANDARDS.md` §5 Finding / blocking / advisory が所有する。本節は、lifecycle上で追跡する情報とstatusを定める。
 
 - Finding ID / summary
 - status: Resolved / Open / Not applicable
@@ -155,7 +153,7 @@ Not applicableとする場合は、その理由を一行で残す。記録先は
 re-reviewで、今回のremediation roundが対象としたfinding・Root cause・関連経路に含まれない新しいfindingが見つかった場合、実装担当は次のremediation roundへ自動的に進まない。次を行って停止する。
 
 1. findingをDurable Historyへ保存する
-2. severity（blocking / advisory）、location、issueを整理する
+2. severity（blocking / advisory）、location、issueを整理する（用語は `harness/DEVELOPMENT_STANDARDS.md` §5 Finding）
 3. previous findingsのstatusを明示する
 4. 解消にscope expansionが必要かを整理する
 5. Humanへ報告する

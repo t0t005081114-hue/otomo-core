@@ -303,6 +303,22 @@ L2ではReview Scopeの縮小を認めない。これはL2に分類されたlogi
 
 L2を満たす実行手段を1つに固定しない。`harness/REMOTE_REVIEW.md` のRemote Reviewは、clean checkout → Deterministic Verification → Codex Independent Review → Evidenceを一経路で満たす有力な手段だが、L2で必須の唯一の方法ではない。同等の独立性・再現性・Evidenceを満たす他の手段でもよい。
 
+### Finding
+
+Findingは、独立レビューまたはself-reviewで指摘された、requirement・正式仕様・Acceptance Criteria・Product固有Rule・Harness等、適用されるSource of Truthに対する問題または改善点である。どのSource of Truthが優先するかは `architecture/RESPONSIBILITY_BOUNDARIES.md` §5 のRule Precedenceに従い、本節はこれを変更しない。本節と次節（blocking / advisory）がFindingの定義とseverityの正本であり、他のCORE文書・adapter・runtimeは参照し、再定義しない。Findingのlifecycle（remediation、re-review、Finding Trace、New Finding Stop Rule、Phase完了との関係）は `harness/PHASE_WORKFLOW.md` §5 / §6 が所有する。
+
+Findingを追跡するときに用いる情報の用語は次のとおりである。本節は全Findingへ一律の必須記録項目を定めない。どの場面で何を必須とするかは、既存のlifecycle上の要求（`harness/PHASE_WORKFLOW.md` §5）のとおりである。
+
+- Finding ID / summary
+- severity（blocking / advisory）
+- location
+- issue
+- status（Resolved / Open / Not applicable）
+
+参考: `harness/PHASE_WORKFLOW.md` §5 は、Finding Traceでは previous findingごとの Finding ID / summary と status（Not applicableの場合はその理由）を、New Finding Stop Ruleでは新しいfindingの severity・location・issue、previous findingsのstatus、scope expansionの要否を求めている。
+
+Product・review runtimeは、独自の項目（例: Why it matters、Requirement / Rule、Recommended remediation）を要求してよい。
+
 ### blocking / advisory
 
 レビュー指摘を原則以下へ分類する。
@@ -333,6 +349,8 @@ Phase完了を妨げない改善候補。必要に応じて将来対応する。
 - Codex review結果は、対象PRのConversationまたはReviewへDurable Historyとして保存する（Evidence Integrityに従い、絶対パス・機密等はsanitizeする）
 - Findingを修正した場合は、同じPRへ追加commitし、再review結果もPRへ保存する
 - `/codex:review` 実行者はPRをmergeしない。mergeはHumanの明示承認後にのみ行う
+- 独立レビュー担当（Codex）はrepository fileを変更せず、commit / push / mergeしない。findingとverdictはPR等のDurable Historyに残す。file変更を伴うremediationやevidence作業は実装担当（Claude Code）が行う（§1 Role Separation）
+- Productが独自の定めを持つ場合（例: OTOMO LAB `AGENTS.md` §8 / §11の、独立レビュー担当がReview Evidenceをfileへ書きcommit / pushするRule）は、2026-09-22のHuman Decisionにより廃止する方向とし、当該repositoryのmigrationで整理する。migrationまではProduct固有Ruleとして扱う（`architecture/RESPONSIBILITY_BOUNDARIES.md` §5）
 
 本節は記録と権限の運用であり、Review Assurance Levelやblocking / advisoryの判定基準を変更しない。
 
@@ -421,6 +439,29 @@ Evidenceを取得
 - AI conversation: 一時的な作業空間
 
 重要な事実をAI conversationだけに残さない。
+
+### Approved CORE Baseline
+
+各repositoryがOTOMO CORE Harnessを参照するときのRuleである（2026-09-22 Human Decision。PR #9で確立し、本節へ正本を移した）。native Codex reviewでの適用は `harness/CODEX_REVIEW.md` §6 が定める。
+
+- CORE参照の手段はsibling checkout `..\otomo-core` を標準とする。local checkoutは参照手段であり、authorityではない。sibling checkoutが読めることは、その現在のHEADやworking treeを正式なCORE Harnessとして使ってよいことを意味しない
+- review / implementationで使うCORE Harnessは、approved CORE baselineから読む
+  - approved ref: 原則 `origin/main`。例外はHumanが明示的に承認したcommit SHA / ref
+  - 使わないもの: その時点でcheckoutされているfeature branch / 未mergeのPR branch、未commitの変更を含むworking tree、Humanが承認していないlocal branch / commit
+  - defaultの `origin/main` を使う場合は、まず `git -C ..\otomo-core fetch origin` で最新にする。その後、作業開始時にapproved refを一度だけimmutableなcommit SHAへresolveする。以後、その作業の間はそのSHAだけを使う。`origin/main` 等のmutable refを途中で再resolveしない
+  - resolveの例: `git -C ..\otomo-core rev-parse 'origin/main^{commit}'`。revision式はquoteする（PowerShellでは `^{commit}` がscript blockとして解釈され、quoteしないと失敗する）
+  - fetchできない場合は、Humanが承認したSHAだけを使える。それも無ければ、baselineは読めないものとして扱い、下記のfail-closed ruleに従う。fetchしていないremote-tracking refをそのままresolveしない
+  - CORE文書は、可能な限りresolveしたSHAから読む（例: `git -C ..\otomo-core show <resolved-SHA>:harness/DEVELOPMENT_STANDARDS.md`）。working treeのfileを直接読むのは、現在のHEADがresolveしたSHAと一致し、working treeがcleanであることを確認できた場合に限る
+  - reviewでは、review結果のDurable Historyに、requested / approved refとresolveしたSHA（fetchを行った場合はその旨）を記録する。mutable refだけをEvidenceとして記録しない
+- CORE Harnessを参照できるかで扱いを分ける
+  - approved CORE baselineを読める: そのbaselineのCORE Harnessを使う
+  - approved CORE baselineを読めず、repositoryにdocumented fallbackがある: 明示されたfallbackだけを使う。reviewでは、approved baselineを読めなかったことと、使ったfallbackをreview結果に明記する
+  - approved CORE baselineを読めず、documented fallbackも無い: 独自に補わず、fail closedとする。CORE Ruleに依存する判定は行わず、Human Decision Required、またはbaseline確認・CORE参照の回復待ちとする。reviewではその旨をreview結果に明記する
+  - approved baselineをSHAへresolveできない、または確認できない場合（例: `origin/main` が取得できない、承認されたSHA / refが不明）は「読めない」として扱う
+  - fallbackの有無やapproved baselineをAgentが推測しない。fallbackを発明しない
+- 既にentrypoint（`AGENTS.md` / `CLAUDE.md` 等）を持つrepositoryでも、CORE参照方法が本節と競合するentrypointはnon-compliantであり、migration対象とする。sibling checkoutの現在のHEAD / working treeをauthorityとして読む記述がこれに当たる
+- どのCORE revisionを正式なCORE Harnessとするかは、COREの承認手続きの問題である（§8）。Product / Lead固有Ruleであることは、未承認のCORE revisionを正式なHarnessとして使う根拠にならない。本節はmigration requirementだけを定義する。各repositoryのfileはそのrepositoryのfollow-up PRで修正する
+- OTOMO CORE自身をreviewする場合、判定基準はapproved CORE baseline側の文書であり、PR head側のCORE文書は変更対象のmaterialである
 
 ## 8. No Silent Harness Mutation
 
