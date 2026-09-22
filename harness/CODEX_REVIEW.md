@@ -83,12 +83,12 @@ native reviewでも、Reviewerは次に従う。定義は参照先が正本で�
 | 未決定の仕様・TBDを推測で確定しない。findingまたは確認事項として報告する | `harness/DEVELOPMENT_STANDARDS.md` §3 |
 | 責務境界を確認する | `architecture/RESPONSIBILITY_BOUNDARIES.md`、`architecture/LEAD_AGENTS.md` |
 | re-reviewではprevious findingをResolved / Open / Not applicableで追跡する | `harness/PHASE_WORKFLOW.md` §5 Finding Trace |
-| severity（blocking / advisory）、Review Assurance Level | `harness/DEVELOPMENT_STANDARDS.md` §5 |
+| Findingの定義・severity（blocking / advisory）、Review Assurance Level | `harness/DEVELOPMENT_STANDARDS.md` §5 Finding / blocking / advisory |
 | review結果の保存 | `harness/DEVELOPMENT_STANDARDS.md` §4 Durable History、§5 Codex Review Durable History、Evidence Integrity |
-| Reviewerは修正しない。新しいfindingはfindingとして報告する | `harness/DEVELOPMENT_STANDARDS.md` §1 Role Separation、`harness/PHASE_WORKFLOW.md` §5 New Finding Stop Rule |
-| Reviewerはcommit / push / mergeしない。mergeはHumanの明示承認後のみ | `harness/DEVELOPMENT_STANDARDS.md` §5 Codex Review Durable History |
+| Reviewerは修正しない。新しいfindingはfindingとして報告する | `harness/DEVELOPMENT_STANDARDS.md` §1 Role Separation / §5 Codex Review Durable History、`harness/PHASE_WORKFLOW.md` §5 New Finding Stop Rule |
+| Reviewerはrepository fileを変更せず、commit / push / mergeしない。mergeはHumanの明示承認後のみ | `harness/DEVELOPMENT_STANDARDS.md` §5 Codex Review Durable History |
 
-Productが既存の `AGENTS.md` でReview Evidenceの記録について個別のRuleを定めている場合（例: OTOMO LAB `AGENTS.md` §8 / §11）、それはProduct固有Ruleとして扱う（`architecture/RESPONSIBILITY_BOUNDARIES.md` §5）。本ファイルはProduct Ruleを付与も撤回もしない。mergeの禁止はどのrepositoryでも変わらない。
+Productが既存の `AGENTS.md` でReview Evidenceの記録について個別のRuleを定めている場合（例: OTOMO LAB `AGENTS.md` §8 / §11）の扱いは `harness/DEVELOPMENT_STANDARDS.md` §5 Codex Review Durable History に従う。mergeの禁止はどのrepositoryでも変わらない。
 
 ## 5. AGENTS.md と CLAUDE.md の分担
 
@@ -106,26 +106,13 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 
 - OTOMO CORE自身もroot `AGENTS.md` を持つ（CORE repositoryのreview用）
 - 新しく `AGENTS.md` を置くrepositoryは `harness/templates/agents-review-entrypoint.md` を出発点にする。存在しない文書を必須にしない
-- 既にentrypoint（`AGENTS.md` / `CLAUDE.md` 等）を持つrepository（例: OTOMO LAB）は、本ファイルを理由に全面的に書き直す必要はない。ただし、CORE参照方法が下記のapproved CORE baseline ruleと競合するentrypointはnon-compliantであり、migration対象とする。sibling checkoutの現在のHEAD / working treeをauthorityとして読む記述がこれに当たる
-- どのCORE revisionを正式なCORE Harnessとするかは、COREの承認手続きの問題である（`harness/DEVELOPMENT_STANDARDS.md` §8）。Product / Lead固有Ruleであることは、未承認のCORE revisionを正式なHarnessとして使う根拠にならない。本ファイルはmigration requirementだけを定義する。各repositoryのfileはそのrepositoryのfollow-up PRで修正する
+- 既にentrypoint（`AGENTS.md` / `CLAUDE.md` 等）を持つrepository（例: OTOMO LAB）は、本ファイルを理由に全面的に書き直す必要はない。ただし、CORE参照方法がapproved CORE baseline ruleと競合するentrypointはmigration対象である（`harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline）
 - repository-local instruction sourceはreview-harness fileとして扱う（`AGENTS.md` は `harness/REMOTE_REVIEW.md` §11 に明記）。追加・変更はPRで行い、独立レビューとHuman承認を経る。review時の扱いは §6.1 に従う
 - Remote Reviewを導入済みのrepositoryでは、`AGENTS.md` が必須とする文書とRemote Review manifestの一致を維持する（`harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistency）。sibling checkout上のCORE文書はnative review用のcontextであり、checkout内のfile-backedなSource of Truthではないため、manifestへそのまま要求しない。Remote Reviewのcontextは各Productの `scripts/remote-review/config.json` と同 §9 に従う（例: OTOMO LAB `AGENTS.md` §2）
-- CORE参照の手段はsibling checkout `..\otomo-core` を標準とする。local checkoutは参照手段であり、authorityではない。sibling checkoutが読めることは、その現在のHEADやworking treeを正式なCORE Harnessとして使ってよいことを意味しない
-- native reviewで使うCORE Harnessは、approved CORE baselineから読む（2026-09-22 Human Decision）
-  - approved ref: 原則 `origin/main`。例外はHumanが明示的に承認したcommit SHA / ref
-  - 使わないもの: その時点でcheckoutされているfeature branch / 未mergeのPR branch、未commitの変更を含むworking tree、Humanが承認していないlocal branch / commit
-  - defaultの `origin/main` を使う場合は、まず `git -C ..\otomo-core fetch origin` で最新にする。その後、approved refを一度だけimmutableなcommit SHAへresolveする。以後、そのreviewの間はそのSHAだけを使う。`origin/main` 等のmutable refを途中で再resolveしない
-  - resolveの例: `git -C ..\otomo-core rev-parse 'origin/main^{commit}'`。revision式はquoteする（PowerShellでは `^{commit}` がscript blockとして解釈され、quoteしないと失敗する）
-  - fetchできない場合は、Humanが承認したSHAだけを使える。それも無ければ、baselineは読めないものとして扱い、既存のfail-closed ruleに従う。fetchしていないremote-tracking refをそのままresolveしない
-  - CORE文書は、可能な限りresolveしたSHAから読む（例: `git -C ..\otomo-core show <resolved-SHA>:harness/DEVELOPMENT_STANDARDS.md`）。working treeのfileを直接読むのは、現在のHEADがresolveしたSHAと一致し、working treeがcleanであることを確認できた場合に限る
-  - review結果のDurable Historyには、requested / approved refとresolveしたSHA（fetchを行った場合はその旨）を記録する。mutable refだけをEvidenceとして記録しない
-- CORE Harnessを参照できるかで扱いを分ける（2026-09-22 Human Decision）
-  - approved CORE baselineを読める: そのbaselineのCORE Harnessを使う
-  - approved CORE baselineを読めず、repositoryにdocumented fallbackがある: 明示されたfallbackだけを使う。approved baselineを読めなかったことと、使ったfallbackをreview結果に明記する
-  - approved CORE baselineを読めず、documented fallbackも無い: 独自に補わず、fail closedとする。CORE Ruleに依存する判定は行わず、Human Decision Required、またはbaseline確認・CORE参照の回復待ちとしてreview結果に明記する
-  - approved baselineをSHAへresolveできない、または確認できない場合（例: `origin/main` が取得できない、承認されたSHA / refが不明）は「読めない」として扱う
-  - fallbackの有無やapproved baselineをAgentが推測しない。fallbackを発明しない
-- OTOMO CORE自身をreviewする場合、判定基準はapproved CORE baseline側の文書であり、PR head側のCORE文書は変更対象のmaterialである（§6.1と同じ考え方）
+- CORE Harnessの参照（sibling checkoutの位置づけ、approved CORE baseline、SHAへのresolve、CORE unavailable時のfallback / fail closed、OTOMO CORE自身のreview）は `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline に従う。本ファイルは再定義しない。native reviewでの適用:
+  - native reviewはlocal checkoutで動くため、sibling checkout上のCOREを、review開始時にresolveしたSHAから読む
+  - Review Entry Point（template・各repositoryの `AGENTS.md`）がCORE availabilityの扱いとして本節を参照している場合も、上記の正本に従う
+  - OTOMO CORE自身をnative reviewする場合は、resolveしたbase SHAを `codex review --base <resolved-SHA>` のように渡すと、mutable refを途中で再resolveせずに済む（例）
 
 ### 6.1 Instruction Sourceを変更するchange
 
