@@ -151,11 +151,34 @@ PR comment "/review ..."
 
 ## 6. Self-hosted Runner
 
-- 想定: 自宅Windows PC / x64 / GitHub Actions Runner（Windows service）/ Node.js / Git / Codex CLI（必要ならPlaywright browsers）
+- 想定: 自宅Windows PC / x64 / GitHub Actions Runner / Node.js / Git / Codex CLI（必要ならPlaywright browsers）
 - 推奨label: `self-hosted`, `windows`, `x64`, `otomo-review`
 - labelは repository variable `REMOTE_REVIEW_RUNS_ON`（JSON配列）で変更できる
-- Runnerは専用Windowsユーザーで動かす（`harness/REMOTE_REVIEW_SECURITY.md` §3）
+- Runnerは専用Windowsユーザーのsecurity principalで動かす（`harness/REMOTE_REVIEW_SECURITY.md` §3）
 - 登録対象は **private repositoryのみ**
+
+### Runner Mode（2026-09-23 Human Decision）
+
+Runner processをどのようにhostするかを **Runner Mode** と呼ぶ。security invariantは専用Windowsユーザーというsecurity principalに属するものであり、process hostingの方式そのものには属さない（`harness/REMOTE_REVIEW_SECURITY.md` §3）。
+
+| Mode | 起動 | 停止 | 本Pilotでの扱い |
+|---|---|---|---|
+| Interactive | 専用runner userでWindowsにサインインし、runner directoryで `run.cmd` を実行する | その `run.cmd` processを停止する | **採用**（2026-09-23 Human Decision） |
+| Service | Windows Serviceとして登録し、serviceを開始する | serviceを停止する | 将来利用可能な代替mode。Formal Runner Acceptanceの必須条件ではない |
+
+どちらのmodeでも共通して必須なもの:
+
+- Runner専用のWindowsローカルユーザー（Administratorsに入れない）のcontextで動くこと
+- 普段使いのWindowsユーザーを使わないこと
+- そのユーザーにCodex以外の認証情報を置かないこと（`harness/REMOTE_REVIEW_SECURITY.md` §3）
+- private repositoryにのみ登録すること
+- Operator Gate（§1）が必須であること
+
+Interactive modeについての用語上の注意:
+
+**Interactive modeは「review job単位ではunattended」である。** operatorが `run.cmd` を起動した後は、個々の `/review` 実行ごとに人間の操作を必要としない。「Interactive」が指すのは、runner processが専用userの対話sessionから人間の意思で起動・停止されることであり、Codex実行のたびに人間が応答することではない。`run.cmd` 起動後に対話promptでreview jobが停止する状態は、Interactive modeでもAcceptance不成立として扱う（§20）。
+
+2つのmodeは運用特性が同じではない。差分は `harness/REMOTE_REVIEW_SECURITY.md` §3に記録する。Modeを変更する場合、§20のmode固有checkを再実施する。
 
 ## 7. Deterministic Verification
 
@@ -623,6 +646,8 @@ concurrency groupの計算はworkflow式（`fromJSON` によるallowlist評価�
 
 Runner登録前に検証できない項目は「未検証」と記録し、推測でPASSにしない。単体テスト・mutation testで確認済みの項目（AT-06〜AT-29の多く）と、merge後に実GitHub Actions / 自宅PC Self-hosted Runner上で確認する必要がある項目（AT-01〜AT-05、AT-18の一部、AT-22のGitHub上での実地確認など）は区別する。前者は本書のOTOMO CORE側リポジトリと `otomo-lab` の `node --test` で継続的に確認できるが、後者はRunner登録・実PR経由の `/review` 実行後でなければ「検証済み」と記録しない。
 
+**Runner Modeとの関係（2026-09-23）**: AT-01〜AT-29は、trigger・認可・Verification・Codex Evidence・report semanticsを対象としており、runner processのhosting方式（§6 Runner Mode）に依存しない。Runner Modeを変更してもAT-01〜AT-29の内容・期待結果は変わらない。Runner Mode固有のEvidence（runner userのidentity、採用mode、runner process稼働中のOnline / Idle、停止後のOffline、対話promptによるblockingが無いこと）は§20 Runner Acceptance Gateが所有し、AT番号を新設しない。ただし、あるRunner Modeで実環境ATを通したという記録は、そのmodeについてのみ有効である（§20 Mode変更時）。
+
 ## 16. Implementation Decision Trace（2026-09-13 / Pilot）
 
 ### Rejected Approaches
@@ -647,6 +672,7 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | GitHub Actionsをmajor tag参照のまま維持する | supply chain上、tagの指す内容は更新されうる。full commit SHAへpinした |
 | workflow式（`fromJSON`）でallowlistを評価し続ける | allowlist変数が不正なJSONのときworkflow式の評価自体が壊れ、「安全に拒否し理由を記録する」設計と不一致になる。allowlist判定をtrusted script（`authorize.mjs`）へ一本化した |
 | `/review` の大文字小文字を区別しない仕様を維持する | GitHub Actionsの式関数は大文字小文字を区別しない仕様であり、workflow側では強制できない。認可境界をtrusted scriptに置くなら、仕様も一致させる方が単純である |
+| すべてのRemote Review runnerにWindows Serviceを必須とする（2026-09-23 Human Decision） | security invariantは「専用Windowsユーザーというsecurity principal」であって、process hosting方式ではない。Serviceを必須にすると、invariantを1つのhosting modeへ不必要に結合させる。現在の運用では常時受付が不要で、必要なときだけrunnerを起動する方がOperator Gate（§1）と整合し、露出時間も人間が制御できる。またService mode固有の非対話context由来の挙動を、必要になる前に導入することを避けられる。**Service modeが安全でないという判断ではない**（§6 Runner Mode） |
 
 ### Deliberate Non-Goals
 
@@ -680,7 +706,8 @@ Runner登録前に検証できない項目は「未検証」と記録し、推�
 | Redactionの取りこぼし | 未知形式のsecretがlogに出る | Artifact閲覧者（repo read権限者）への露出 | Runner環境にsecretを置かない運用、retention 14日 |
 | Prompt injectionによるreview品質低下 | PR本文・コード中の指示文 | 見逃し（誤PASS）の可能性 | Deterministic Verificationと人間判断の併用 |
 | Grounding checkの範囲 | `TOOL_CHECK` はCodexがread-onlyコマンドを実行できたことだけを証明する | 必要なfileを読まずにverdictを出す可能性は残る | Verification Evidence欄の「実際に読んだfile・command」を人間が確認 |
-| Windows service上のCodex sandbox | Runner専用ユーザー・非対話serviceで `windows.sandbox=elevated` が動くかは未検証 | 全reviewが `TOOL_CHECK` 不成立でINCOMPLETE | Runner登録後の最初の `/review` で確認 |
+| Runner context上のCodex sandbox | Runner専用ユーザーのcontextで `windows.sandbox=elevated` が動くかは、当該Runner Modeで実際に `/review` を通すまで未検証。Service mode（非対話service context）は、対話sessionを前提とする初期設定が必要な場合に追加の非互換を持ちうる | 全reviewが `TOOL_CHECK` 不成立でINCOMPLETE | 採用したRunner Modeでの最初の `/review` で確認（§20 mode固有check） |
+| Interactive modeのrunner可用性 | Interactive modeでは、専用userのサインインと `run.cmd` の起動がなければrunnerがOfflineのままになる。再起動・logoff後は自動復帰しない | `/review` のjobがqueuedのまま残る（GitHubは一定時間後に失敗させる） | 意図した設計（Human controlled exposure window、§6）。operatorがrunnerを起動してから `/review` する運用で扱う |
 | GitHub Actionsのリリース内容自体の改ざん・乗っ取り | full commit SHAへpinしても、そのSHAが指すコード自体が将来のバージョンで悪意ある変更を含む可能性 | supply chain | pin先SHAの内容をpin時に確認する（実施済み）。更新時は都度GitHub上でtag/commitを確認してからpinし直す |
 | Concurrency groupがallowlist非依存（§13） | allowlistに含まれないユーザーの `/review` らしきコメントが、進行中の認可済みreviewをcancelしうる | 実行済みreviewの喪失・再実行の手間（unauthorized runがrunnerへ到達することはない） | private repositoryのcollaborator数を絞る運用、必要なら将来requester単位のgroup分割を検討 |
 | Required Context Documentsの範囲 | harnessが確認するのは「checkout内にfileとして存在し読めるか」だけで、「Codexが実際にそのfileを読んだか」は確認しない | 必須文書が存在してもCodexが読まずに判断する可能性は残る | Verification Evidence欄の記述を人間が確認する（TOOL_CHECK Responsibilityと同じ限界） |
@@ -732,13 +759,45 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 
 本番利用（実際の `/review` をSelf-hosted Runnerで受け付けること）の前に、次を必須のAcceptance Gateとする。`harness/REMOTE_REVIEW_SETUP.md` §6の手順で確認し、いずれか1つでも成立しなければRunnerを本番投入しない。
 
-- Windows Serviceとして動作する、Runner専用user contextで
-- Codexが実際に起動できる（`codex --version`相当）
+Formal Runner Acceptanceの構成は次のとおりであり、特定のprocess hosting方式を必須条件にしない（2026-09-23 Human Decision）。
+
+```text
+選択したRunner Mode（§6）+ 共通security invariant + mode固有check
+```
+
+### 共通invariant（Mode非依存）
+
+- Runnerが、Runner専用Windowsユーザーのcontextで実行されている（`harness/REMOTE_REVIEW_SECURITY.md` §3）
+- 採用したRunner Mode（Interactive / Service）が明示的に記録されている
+- Acceptanceを実施したRunner Modeが、実運用で使うRunner Modeと一致している
+- Codexが実際に起動できる（`codex --version` 相当）
 - read-onlyコマンドを実行できる（`TOOL_CHECK` がVERIFIEDになる）
-- non-interactiveに動作する（対話promptで停止しない）
 - Evidence（`metadata.json` 等）が生成される
 
-実際のWindows Service環境はRunner登録後でなければ検証できないため、登録前は「未検証」と明記する（推測でPASSにしない）。
+### Interactive mode固有check
+
+Interactive modeで本番投入する場合、上記に加えて次を確認する。
+
+1. runner processが、専用runner userとして実行されている
+2. `codex --version` 相当が成功する
+3. Codexがread-onlyコマンドを実行できる
+4. `TOOL_CHECK` がVERIFIEDになる
+5. `run.cmd` を起動した後、対話promptでreview jobが停止しない（review job単位でunattendedに完走する）
+6. Evidenceが生成される
+7. runner processを停止すると、GitHub上でrunnerがOffline / 利用不可になり、新しいRemote Review jobが開始されない
+8. service modeでの動作を主張しない（Service modeを実際に検証していない限り、Service mode側をPASSと記録しない）
+
+### Service mode固有check
+
+Service modeを採用する場合は、Service mode自身のcheck（非対話service contextでのCodex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・Evidence生成）を別途実施する。Interactive modeのPASSは、Service modeのAcceptanceを代替しない。
+
+### Mode変更時
+
+Interactive → Service、またはService → Interactiveへ変更する場合、変更後のmodeについて上記のmode固有checkを再実施する。過去に別modeで取得したAcceptance結果を流用しない。
+
+### 記録
+
+実環境の検証はRunner登録・実PR経由の `/review` 実行後でなければ行えないため、未実施の項目は「未検証」と明記する（推測でPASSにしない）。検証していないRunner Modeについて、PASSと記録しない。
 
 ## Change History
 
@@ -751,3 +810,4 @@ uses: actions/checkout@<FULL_COMMIT_SHA> # v7.0.1
 - 2026-09-15 v0.1 Draft, 最終Independent Re-review remediation（CORE-RR-FINAL-001、Blocking）: Canonical Command Binding（本書§7）の実装は、command/exit_code/timed_out/skip_reason/failureの整合検証を `status: PASS` を自己申告するcheckだけに限定していた。`status: FAIL`（`failure`は正当な`VERIFICATION_FAILURE`に見える）でありながら `command` が別checkのものに差し替えられたEvidenceがこの検証を素通りしうる、という指摘（CORE-RR-FINAL-001）を受け、`lib/checks.mjs` `validateCheckManifest`のPASS限定block を `validateExecutionState()` へ置き換えた。command一致チェックは `command !== null` である限りstatusによらず適用し、加えてPASS/FAIL/INFRA_ERROR/SKIPPEDそれぞれについて、`runChecks()`/`classifyCheckResult()`（`lib/checks.mjs`/`lib/process.mjs`）の実際の状態遷移から機械的に導出できる不変条件（例: FAILは`timed_out`が常にfalse・`failure`が常に非null、構造的FAILは`command`/`exit_code`が常にnull、実行されたFAILは`skip_reason`が常にnullかつ`exit_code`が非null非ゼロ、INFRA_ERRORは`command`が常に非null・`skip_reason`が常にnull、SKIPPEDは`command`/`exit_code`が常にnullかつ`timed_out`が常にfalse・`failure`が常にnull）を検証する。INFRA_ERRORの`exit_code`/`timed_out`は、invocation準備失敗・spawn失敗・timeout・signal終了のsub-caseごとに正当に異なりうるため、単一の期待値へは固定していない。AT-28の記述をこの拡張に合わせて修正。§15 Acceptance Tests・本節（§7）を更新。Pilot実装（`otomo-lab`）のtest suiteを112から122へ拡張（新規10件、すべて`checks.test.mjs`）。同時に検出された`otomo-lab`固有の`LAB-RR-FINAL-002`（`package-lock.json`が一部のnpmバージョンで`npm ci`のlockfile整合性検証に失敗する既存の欠陥。Remote Reviewのreport job／Evidence Schema／Verification semanticsとは無関係）は`otomo-lab`側の`docs/DECISIONS_AND_FAILURES.md` D-020に記録し、本書のharness仕様変更は伴わない
 - 2026-09-16 v0.1 Draft, Focused Independent Audit remediation（CORE-RR-AUDIT-001、docs-only）: 本書§7冒頭のVerification Checks Manifest Cross-Check説明に、CORE-RR-FRR-002（2026-09-15）で既に修正されたはずの旧semanticsが現在形のまま残存していた。具体的には、(1) `summarizeVerification`の判定条件を「checkが1件もFAILせず・INFRA_ERRORもなく・PASSが1件以上あればPASS」と、`required`フラグを考慮しない旧ロジックのまま説明していた（Required Check PASS Requirementが導入した現行の「required全件PASS」不変条件と矛盾）、(2) manifest cross-checkのINCOMPLETE条件bulletに「trusted manifestで`required: true`のcheckが、Evidence側で`PASS`以外のstatusになっている」という、CORE-RR-FRR-002がEvidence corruptionと実行結果semanticsを分離したはずの旧記述が残っていた。いずれも同一section内の後続文（definition integrity / execution result semanticsの分離説明、Required Check PASS Requirement）とは矛盾しており、規範本文中に旧仕様と現行仕様が並存していた。実装・SEC-25・AT-26・LAB test suiteに変更はなく、本書の記述をそれらと一致するよう修正しただけ（新規SEC/AT番号追加なし）。§7冒頭の`summarizeVerification`説明を「`checks[]`のみを見る判定である」という現行の限界の説明に置き換え、該当bulletを削除して「required checkの非PASSはこの照合の対象外」という明示的な否定文へ置換した
 - 2026-09-17 v0.1 Draft, Risk-based Independent Review整合（docs-only）: `harness/DEVELOPMENT_STANDARDS.md` §5がRisk-based Review Assurance Level（L0 / L1 / L2）へ再設計されたことに伴い、§2の既存Harness対応表へReview Assurance Level行を追加し、`PHASE_WORKFLOW` §4の節名変更を反映。あわせて、Remote Reviewが常にMandatory audit scope全体を監査すること、Review Assurance LevelがRemote Review側のscope規則を変更しないことを明記した。Remote Review自体のStatus（Draft v0.1 / Pilot）、Supported Trust Model、Explicit Non-Goals、Security Claim、Trigger / Verification / Codex / Evidence semantics、SEC・AT番号、Pilot実装のいずれにも変更はない
+- 2026-09-23 v0.1 Draft, Runner Mode採用（Human Decision、docs-only、Forced Level 2扱い）: Formal Runner Acceptance Gate（§20）が `Windows Serviceとして動作する` をmode固有の必須条件として要求しており、security invariant（Runner専用Windowsユーザーというsecurity principal）を特定のprocess hosting方式へ結合させていた。§6にRunner Mode（Interactive / Service）の定義を追加し、今回のPilotではInteractive mode（専用runner userでサインインし `run.cmd` を手動起動する）を採用するHuman Decisionを記録した。§20を「選択したRunner Mode + 共通security invariant + mode固有check」の構成へ再定義し、Interactive mode固有check 8項目とService mode固有check、Mode変更時の再検証要求を明記した。Interactive modeが「review job単位ではunattended」であること（`run.cmd` 起動後は個々のCodex実行に人間の操作を要さないこと）を用語として固定した。§15にAT-01〜AT-29がRunner Mode非依存である旨とRunner Mode Evidenceの所有が§20であることを追記（新規AT番号なし）。§16 Rejected Approachesへ「すべてのrunnerにWindows Serviceを必須とする」案の不採用理由を追加し、Residual Risksの `Windows service上のCodex sandbox` 行をmode中立な `Runner context上のCodex sandbox` へ置き換え、Interactive modeのrunner可用性（再起動・logoff後に自動復帰しない）行を追加した。**Service modeを削除・禁止せず、安全でないとも判断していない**。Trigger / Verification / Codex / Evidence semantics、workflow実装、permissions、Codex sandbox、Evidence format、prompt、allowlist、PR write boundary、Product adoption architecture、Status（Draft v0.1 / Pilot）に変更はない

@@ -15,6 +15,7 @@ Claude Code / Codexでは完了できない手動設定をまとめる。Runner�
 | Runner labels | `self-hosted`, `windows`, `x64`, `otomo-review` |
 | Runner directory（推奨） | `C:\actions-runner\<repository>` |
 | Runner専用Windowsユーザー（推奨名） | `<runner-user>` |
+| Runner Mode | **Interactive**（2026-09-23 Human Decision。`harness/REMOTE_REVIEW.md` §6） |
 | Node.js | `package.json` の engines は `>=22.12.0`（Node.js 24 LTS推奨） |
 
 ## 1. GitHub: workflowをdefault branchへ入れる
@@ -93,7 +94,7 @@ git init
 - Runnerには npm版 `@openai/codex` を使う。デスクトップアプリ同梱のCLIは、補助実行ファイル（tool host）が同じ場所に無いとコマンドを実行できないことを2026-09-13に確認した
 - Windows sandboxの初期設定を求められた場合は、このユーザーのセッションで完了させる
 
-- 未検証: Windows service（非対話セッション）から起動したときに、Codexのread-only sandboxが追加設定なしで動くか。§6の実行結果で確認する
+- Interactive mode（本Pilotの採用mode）では、runner processはこのsmoke testと同じ「`<runner-user>` の対話セッション」で動く。Service modeを採用する場合にかぎり、非対話service sessionから起動したときにCodexのread-only sandboxが追加設定なしで動くかは 未検証 であり、§6の実行結果で確認する
 - Playwrightを使うProductだけ: `<runner-user>` で対象repoをcheckoutして `npx playwright install`（OTOMO LABは現時点で不要）
 
 PCの電源設定: Runnerを使う間はスリープしない設定にする。
@@ -111,35 +112,83 @@ PCの電源設定: Runnerを使う間はスリープしない設定にする。
 3. GitHub画面の **Download** 欄のコマンド（`Invoke-WebRequest`、hash確認、展開）をそのまま実行する
 4. GitHub画面の **Configure** 欄の `./config.cmd --url ... --token ...` を実行し、対話で入力する:
 
-   | 質問 | 入力 |
-   |---|---|
-   | runner group | Enter（Default） |
-   | runner name | 任意（個人名・PC名を含めない名前） |
-   | additional labels | `otomo-review` |
-   | work folder | Enter（`_work`） |
-   | run as service | `Y` |
-   | service account | `.\<runner-user>` と、そのpassword |
+   | 質問 | Interactive mode（本Pilotの採用mode） | Service modeを選ぶ場合 |
+   |---|---|---|
+   | runner group | Enter（Default） | 同左 |
+   | runner name | 任意（個人名・PC名を含めない名前） | 同左 |
+   | additional labels | `otomo-review` | 同左 |
+   | work folder | Enter（`_work`） | 同左 |
+   | `Would you like to run the runner as service? (Y/N)` | **`N`** | `Y` |
+   | service account | （訊かれない） | `.\<runner-user>` と、そのpassword |
 
    - tokenは短時間で失効する一時tokenだが、保存しない
    - `self-hosted` / `Windows` / `X64` のlabelは自動で付く（labelの大文字小文字は区別されない）
+   - service化は明示的なopt-inである。非対話で登録する場合、Service modeは `--runasservice` を付けたときだけ有効になり、付けなければInteractive modeで登録される（`config.cmd --help`、runner 2.337.0で確認）
+   - Interactive modeでは、runner登録自体は管理者PowerShellで行ってよいが、**runnerの起動は `<runner-user>` のセッションで行う**（§5.1）
 
-5. 確認:
+5. Runner Modeを記録する
 
-   ```powershell
-   Get-Service "actions.runner.*"
-   ```
+   採用したRunner Modeを、Runner Acceptanceの記録に明示する（`harness/REMOTE_REVIEW.md` §20 共通invariant）。Acceptanceを実施したmodeと、実運用で使うmodeを一致させる。
 
-   Status が `Running`、GitHub の Runners 画面で **Idle** になっていればよい。
+### 5.1 Interactive mode: 起動
 
-Node.js・Git・Codexを後からinstall / 更新した場合は、serviceを再起動する:
+`<runner-user>` でWindowsにサインインし、runner directoryで実行する:
 
 ```powershell
-Restart-Service "actions.runner.*"
+cd C:\actions-runner\<repository>
+.\run.cmd
 ```
+
+`config.cmd --help` の記載どおり、`run.cmd` はrunnerを対話的に実行し、オプションを必要としない（runner 2.337.0で確認）。
+
+期待する状態:
+
+- GitHubへ接続され、Listening for Jobs の状態になる
+- GitHub の Runners 画面で **Idle** になる
+- そのterminalは起動したまま維持される（閉じるとrunnerも停止する）
+
+### 5.2 Interactive mode: 停止
+
+runnerを起動したterminalで `Ctrl+C` を送り、runner processを終了させる。job実行中に停止した場合、そのrunは失敗またはcancelとして残りうるため、Idle（job非実行）の状態で停止する。
+
+期待する状態:
+
+- GitHub の Runners 画面で **Offline** になる
+- 新しいRemote Review jobが開始されない（`/review` してもjobはqueuedのまま残る）
+
+### 5.3 Interactive mode: 再起動・logoff
+
+Interactive runnerは、PCの再起動や `<runner-user>` のlogoffのあと **自動では復帰しない**。人間が再度サインインして `run.cmd` を起動する必要がある。
+
+これは意図した設計であり、露出時間を人間が制御するというRunner Mode選択の根拠そのものである（`harness/REMOTE_REVIEW_SECURITY.md` §3 Runner Mode）。Remote Reviewを使うときだけrunnerを起動する。
+
+### 5.4 Mode変更
+
+既に一方のmodeで登録済みのrunnerを他方へ変更する場合:
+
+1. 現在のrunner processを停止する（Interactive: `run.cmd` を停止 / Service: serviceを停止）
+2. Runners画面 → 対象Runner → Remove で表示される `./config.cmd remove --token ...` を実行する
+3. §5の手順で、目的のmodeとして登録し直す
+4. `harness/REMOTE_REVIEW.md` §20のmode固有checkを **変更後のmodeで再実施する**（旧modeのAcceptance結果を流用しない）
+
+Node.js・Git・Codexを後からinstall / 更新した場合は、runner processを再起動する。
+
+- Interactive mode: `run.cmd` を停止して起動し直す
+- Service mode: `Restart-Service "actions.runner.*"`
 
 ## 6. 動作確認（Acceptance Tests）
 
-`harness/REMOTE_REVIEW.md` §15 のうち、GitHub上でしか確認できない項目を実施する。§20 Runner Acceptance Gate（Codex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・non-interactive動作・Evidence生成）が成立することを、以下のAT-02実行時に確認する。
+`harness/REMOTE_REVIEW.md` §15 のうち、GitHub上でしか確認できない項目を実施する。AT-01〜AT-29はRunner Mode非依存である（`harness/REMOTE_REVIEW.md` §15）。
+
+§20 Runner Acceptance Gate（共通invariant + 採用したmodeのmode固有check）が成立することを、以下のAT-02実行時に確認する。Interactive modeでは、共通invariant（専用runner user context・Codex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・Evidence生成・採用modeの記録）に加えて次を記録する:
+
+- runner processを実行しているWindowsユーザー（`<runner-user>` であること）
+- Runner Mode = Interactive
+- `run.cmd` 稼働中にGitHub上でOnline / Idleであること
+- `run.cmd` 起動後、対話promptでreview jobが停止しないこと（review job単位でunattendedに完走する）
+- runner processを停止するとGitHub上でOfflineになり、新しいjobが開始されないこと
+
+Service modeを検証していない場合、Service modeの項目をPASSと記録しない（`harness/REMOTE_REVIEW.md` §20）。
 
 1. 確認用PRを作る（mergeしない小さな変更）
 2. **AT-01**: PRに `LGTM` とコメント → Actionsの Remote Review run で `Authorize /review` が skipped、PRには何も投稿されない
@@ -173,10 +222,10 @@ Restart-Service "actions.runner.*"
 | `/review` してもrunが出ない | workflowがmainに無い | §1 |
 | runはあるが `Authorize /review` が skipped | `REMOTE_REVIEW_ALLOWED_USERS` 未設定・loginが含まれない | §2 |
 | `Authorize request and resolve PR` step に `::error::` ログが出るが、run自体は失敗せず、PRには何も投稿されない | `REMOTE_REVIEW_ALLOWED_USERS` のJSONが不正（`authorize.mjs` が `ALLOWLIST_INVALID` としてfail closedし、Self-hosted review jobへは到達しない） | §2の値を修正する |
-| `Verify and review (self-hosted)` が Queued のまま | Runner offline、label不一致、PCスリープ | Runners画面で Idle を確認、`REMOTE_REVIEW_RUNS_ON` を確認 |
+| `Verify and review (self-hosted)` が Queued のまま | Runner offline、label不一致、PCスリープ。Interactive modeでは `run.cmd` が起動されていない・再起動/logoffで停止した（§5.3） | `<runner-user>` でサインインして `run.cmd` を起動する、Runners画面で Idle を確認、`REMOTE_REVIEW_RUNS_ON` を確認 |
 | INCOMPLETE + `AUTHENTICATION_FAILURE` | Codex loginの期限切れ | `<runner-user>` で `codex login` |
-| INCOMPLETE + `Codex CLI was not found` | serviceから `codex` が見えない | `REMOTE_REVIEW_CODEX_BIN` を設定、service再起動 |
-| Install が INFRA_ERROR（EPERM / EBUSY） | antivirusのスキャン、前回processの残留 | 再度 `/review`、service再起動 |
+| INCOMPLETE + `Codex CLI was not found` | runner processから `codex` が見えない | `REMOTE_REVIEW_CODEX_BIN` を設定、runner processを再起動（§5.4） |
+| Install が INFRA_ERROR（EPERM / EBUSY） | antivirusのスキャン、前回processの残留 | 再度 `/review`、runner processを再起動（§5.4） |
 | Install が INFRA_ERROR（network） | npm registryに届かない | 再度 `/review` |
 | Format check が多数のfileでFAILし、Infrastructureに `CRLF` の記録がある | checkoutで改行がCRLFへ変換された | workflowの `GIT_CONFIG_*`（`core.autocrlf=false`）が残っているか確認する |
 | path too long | Windows MAX_PATH | Runner directoryを短くする、`core.longpaths` |
@@ -186,9 +235,12 @@ Restart-Service "actions.runner.*"
 
 ## 8. 停止・削除
 
-- 一時停止: `Stop-Service "actions.runner.*"`
+- 一時停止:
+  - Interactive mode: 稼働中の `run.cmd` を停止する（§5.2）
+  - Service mode: `Stop-Service "actions.runner.*"`
+  - どちらの場合も、GitHub の Runners 画面で **Offline** を確認する
 - 削除: Runners画面 → 対象Runner → Remove で表示される `./config.cmd remove --token ...` を実行し、`C:\actions-runner\<repository>` を削除する
-- 侵害が疑われる場合: service停止 → Runner削除 → ChatGPT側で該当ログインのsessionを確認 → `<runner-user>` ユーザーをprofileごと削除して作り直す
+- 侵害が疑われる場合: runner process停止（上記） → Runner削除 → ChatGPT側で該当ログインのsessionを確認 → `<runner-user>` ユーザーをprofileごと削除して作り直す
 
 ## 9. Cost note
 
@@ -200,3 +252,4 @@ Restart-Service "actions.runner.*"
 - 2026-09-13 v0.1 Draft: OTOMO LAB pilotとして作成
 - 2026-09-13 v0.1 Draft, Independent Review remediation: smoke testをstdin経由・`--ignore-rules`・`approval_policy=never` 付きに更新し本番呼び出しへ近づけた。Runner Acceptance Gate（§20）への参照とAT-18のcancellation residual riskの注記を追加
 - 2026-09-14 文書ドリフト修正（Codex再レビュー前）: `REMOTE_REVIEW_ALLOWED_USERS` のJSONが不正な場合の説明を現在の実装（`authorize.mjs` がALLOWLIST_INVALIDとしてfail closedし、workflow run自体はエラーにならない）へ修正。§2とTroubleshootingを整合させた
+- 2026-09-23 Runner Mode採用（Human Decision、docs-only、Forced Level 2扱い）: 登録手順がService modeを事実上強制していた（`run as service | Y`）ため、Interactive / Service両modeを記述する形へ変更した。§0へRunner Mode行（Interactive）を追加。§4の「Windows service（非対話セッション）でCodex sandboxが動くか未検証」という注記を、Interactive modeではsmoke testと同じ対話セッションで動くこと・未検証はService modeに限る旨へ整理。§5の登録表をmode別に分け、実際のrunner CLIの対話prompt（`Would you like to run the runner as service? (Y/N)`）と、非対話登録では `--runasservice` を付けたときだけService modeになることを、runner 2.337.0の `config.cmd --help` と実バイナリで確認した上で記載（オプションを創作していない）。§5.1〜§5.4として、Interactive modeの起動（`run.cmd`）・停止・再起動/logoff時に自動復帰しないこと・Mode変更手順（再登録とmode固有checkの再実施）を追加。§6のAcceptance手順へ、AT-01〜AT-29がRunner Mode非依存であることと、Interactive modeで記録すべきRunner Mode Evidenceを追加。§7 Troubleshootingと§8 停止・削除のservice前提の記述をmode別へ変更。**専用 `<runner-user>` 運用、Administrators非追加、Codex以外の認証情報を置かない要求は変更していない**

@@ -70,13 +70,31 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 
 最低限（MVP）:
 
-- Runner専用のWindowsローカルユーザー（Administratorsに入れない）でRunner serviceを実行する
+- Runner専用のWindowsローカルユーザー（Administratorsに入れない）のcontextでRunner processを実行する
 - そのユーザーのprofileに、Codex以外の認証情報（Git Credential Manager、`gh`、cloud CLI、SSH key、ブラウザprofile、token入り `.npmrc` 等）を置かない
 - 普段使いユーザーのファイルへアクセスさせない（既定のNTFS権限を維持する）
 - Codexはそのユーザーで個別にloginする
 - workspaceは短いpathに置く（例 `C:\actions-runner\<repository>\_work`）
 
+このsecurity invariantが要求するのは **専用のsecurity principal** であって、Windows Service等のprocess hosting方式そのものではない。Runner processがWindows Serviceとして動くか、専用userの対話sessionから `run.cmd` で動くかは、このinvariantを満たすかどうかを変えない。
+
 将来候補（Deliberate Non-Goal）: VM / Windows Sandbox / WSL2 / container / ephemeral runner、egress制限、Environment protection rules。
+
+### Runner Mode（2026-09-23 Human Decision）
+
+Runner Modeの定義とAcceptance要求は `harness/REMOTE_REVIEW.md` §6 / §20が所有する。本節はsecurity上の残差だけを記録する。本Pilotが採用するのは **Interactive mode** である。
+
+どちらのmodeでも、上記の専用ユーザー分離要求は同一であり、弱めない。
+
+| 観点 | Interactive | Service |
+|---|---|---|
+| 起動条件 | 専用runner userのサインインsessionが必要 | サインインなしで動作しうる |
+| 自動起動 | しない。再起動・logoff後は人間が再度起動する | 自動起動を設定しうる |
+| 露出時間（unattended availability window） | 人間が `run.cmd` を起動している間だけ。狭い | 常時受付を設定した場合は広い |
+| 停止時 | `run.cmd` を停止するとrunnerはOffline / 利用不可 | serviceを停止するとOffline / 利用不可 |
+| Codex / sandbox互換性 | 専用userの対話sessionで動くため、`harness/REMOTE_REVIEW_SETUP.md` §4のsmoke testと同じ条件 | 非対話service contextに由来する追加のCodex / sandbox互換性の懸念を持ちうる（未検証） |
+
+**どちらのmodeが普遍的に安全というものではない。** Interactive modeは露出時間を人間が制御できる一方、runnerの可用性は人間の操作に依存する。Service modeは可用性が高い一方、unattendedな受付時間が長くなり、非対話contextの挙動が追加で未検証になる。Mode選択はこのtrade-offに対するHuman Decisionであり、本Policyの他のControlを置き換えない。
 
 ## 4. Operator Rules
 
@@ -86,8 +104,15 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 4. Runner登録tokenをファイル・チャット・Obsidianへ保存しない
 5. Remote ReviewがPASSでも、merge判断は人間が行う
 6. `AUTHENTICATION_FAILURE` の場合は、Runnerユーザーで `codex login` をやり直す
-7. 不審なEvidence（予期しないharness変更の警告、read-only境界違反、verdict不整合）が出たら、Runner serviceを停止し、専用ユーザーのprofileを点検する
-8. 使わない期間はRunner serviceを停止してよい
+7. 不審なEvidence（予期しないharness変更の警告、read-only境界違反、verdict不整合）が出たら、Runner processを停止し、専用ユーザーのprofileを点検する
+8. 使わない期間はRunner processを停止してよい。Interactive modeでは、必要なときだけ起動する運用を前提とする（§3 Runner Mode）
+
+Runner processの停止は、採用しているRunner Mode（`harness/REMOTE_REVIEW.md` §6）に従う。
+
+- Interactive mode: 稼働中のrunner process（`run.cmd`）を停止する
+- Service mode: 該当のWindows Serviceを停止する
+
+いずれの場合も、停止後にGitHubのRunners画面でOfflineになっていることを確認する。Offlineであれば新しいRemote Review jobは開始されない。
 
 ## 5. Residual Risks（Security）
 
@@ -105,6 +130,7 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 | Stale Review Protectionの GET/POST TOCTOU（2026-09-14追加） | report jobが現在のHEAD SHAを確認した直後から、PRコメントをPOSTするまでの間に新しいcommitがpushされる | 投稿されたコメントの「一致」判定は投稿直前の一時点のもの | GitHub REST APIにcompare-and-swapに相当する原子的操作が無い。人間はreviewed SHAを見て必要なら再度 `/review` する |
 | Context Documents Manifest Cross-Checkの確認範囲（2026-09-14追加、SEC-23で範囲を更新） | report jobはtrusted manifestとEvidenceの `context_documents[]` の整合だけを確認する。「trusted manifestに載っている文書がProductの実際のSource of Truthとして正しいか」自体はharnessが判断しない。AGENTS.mdとconfig.jsonの一致自体はSEC-23（開発時test）が機械的に検証するため、CORE-RR-IR-002の主因（一方だけ変更してもう一方を更新し忘れる）はSEC-23で塞がれている | SEC-23（開発時test）。AGENTS.mdが列挙する文書の集合そのものがProductの実際のSource of Truthとして正しいかどうかはSEC-23の範囲外 | `harness/REMOTE_REVIEW.md` §9 Source of Truth Manifest Consistencyに基づく人間・Independent Reviewでの確認 |
 | Verification Checks / Codex Evidence Semantic Invariantsの確認範囲（2026-09-14追加、SEC-24 / SEC-25） | SEC-24の `effective_sandbox` cross-checkは、Evidenceの `run.runner_os`（review job = harness自身が`RUNNER_OS`から記録する自己申告値）を前提とし、report jobがOSそのものを独立に再測定するわけではない。SEC-24〜SEC-27はいずれも「trusted configとEvidenceの整合」を検証するのであって、「trusted configの必須check一覧・sandbox設定自体が正しいか」は判断しない | harnessそのもの（trusted script）が信頼できる、という既存Trust Model（`harness/REMOTE_REVIEW.md` §1）の範囲内でのみ有効 | 既存Trust Model・Operator Gateの範囲外の脅威として扱う。将来のRunner Acceptance Gate（`harness/REMOTE_REVIEW.md` §20）強化時に合わせて見直す |
+| Runner Modeの運用差（2026-09-23追加、§3 Runner Mode） | Interactive modeでは、runnerの稼働・停止が人間の操作に依存する。`run.cmd` を起動したまま放置すれば露出時間はService modeと同様に長くなり、逆に起動を忘れればreviewがqueuedのまま残る。またInteractive modeでAcceptanceを通しても、Service modeの非対話context固有の挙動は検証されない | 専用ユーザー分離（§3）はmodeによらず維持される。Mode固有checkとMode変更時の再検証を`harness/REMOTE_REVIEW.md` §20で要求する | 露出時間の制御はoperatorの運用に依存し、技術的に強制していない。Service modeの非対話contextでのCodex / sandbox挙動は未検証のまま残る |
 | Canonical Command Bindingの確認範囲（2026-09-15追加、SEC-26） | SEC-26は「自己申告する `command` がtrusted definitionの導出結果と文字列一致するか」を確認するのであって、trusted `config.json` 自身が定義する `command` / `npm_script` の内容が安全・妥当かは判断しない（config.jsonの内容はharness trusted scriptの一部として既存Trust Modelの範囲内） | 既存Trust Modelの範囲内でのみ有効 | config.jsonの変更はProductのcode reviewで確認する（既存運用） |
 
 ## Change History
@@ -118,3 +144,4 @@ Controlを弱める変更（例: `contents: write` の追加、fork PRの許可�
 - 2026-09-14 Independent Re-review remediation（CORE-RR-RR-001 / CORE-RR-RR-002、Blocking）: SEC-24（report jobによるCodex Evidence semantic invariantの検証 — status/verdict整合、tool_check、workspace_unchanged、invocation policy、effective_sandboxのtrusted config/platform整合、blocking_count/advisory_countの整合、codex-review.mdの再parse照合）とSEC-25（report jobによるtrusted `config.checks` manifestとEvidence `checks[]` のcross-check）を追加。Residual Risksに、SEC-24/SEC-25がEvidenceの自己申告 `run.runner_os` を前提とすることと、trusted config自体の正しさは判断しないことを追加
 - 2026-09-15 Independent Re-review remediation（CORE-RR-FRR-001 / CORE-RR-FRR-002、Blocking。ChatGPT独立監査によるVerification semantics regressionの指摘を含む）: SEC-25の文言・実装が「trusted manifestの `required: true` checkがEvidence側で非PASS」であることそのものをEvidence整合性問題としており、正常に実行・記録された `FAIL` / `INFRA_ERROR` までEvidence corruptionと混同していた誤りを修正（definition整合性とexecution result semanticsを分離）。SEC-26（report jobによる、`status: PASS` を自己申告するcheckのcanonical command binding — `canonicalCommand()` で導出したtrusted invocationとの一致、`exit_code`/`timed_out`/`skip_reason`/`failure`の検証）とSEC-27（`summarizeVerification` のrequired-check-all-PASS要件、およびCodex出力の重複section検出）を追加。Residual RisksにCanonical Command Bindingの確認範囲を追加
 - 2026-09-15 最終Independent Re-review remediation（CORE-RR-FINAL-001、Blocking）: SEC-26のcanonical command binding検証が `status: PASS` を自己申告するcheckだけに限定されており、`status: FAIL`（`failure`は正当に見える）だが `command` が別checkのものへ差し替えられたEvidenceを素通りさせていた誤りを修正。SEC-26の適用範囲を「`command` が非nullの全check」（statusによらない）へ拡張し、PASS/FAIL/INFRA_ERROR/SKIPPEDそれぞれについて`runChecks()`/`classifyCheckResult()`の実際の状態遷移から導いた不変条件（`lib/checks.mjs` `validateExecutionState`）を追加検証する。新しいSecurity Controlではなく既存SEC-26の適用範囲の是正であり、新規SEC番号は割り当てない
+- 2026-09-23 Runner Mode採用（Human Decision、docs-only、Forced Level 2扱い）: §3 Runner環境のsecurity invariantが `Runner serviceを実行する` とprocess hosting方式に結合していたため、`Runner processを実行する` というmode中立な表現へ変更し、invariantが要求するのは専用のsecurity principalであってWindows Service等のhosting方式ではないことを明記した。§3へRunner Mode（Interactive / Service）のsecurity残差表を追加し、起動条件・自動起動・露出時間・停止時・Codex / sandbox互換性の差を記録した（どちらのmodeも普遍的に安全とは主張しない）。§4 Operator Rules 7 / 8の `Runner service` をmode中立な `Runner process` へ変更し、Interactive modeでは `run.cmd` の停止、Service modeではserviceの停止という同等の操作を定義した上で、停止後にGitHub上でOfflineであることの確認を追加した。§5へRunner Modeの運用差をResidual Riskとして追加した。**専用ユーザー分離要求（Administratorsに入れない、Codex以外の認証情報を置かない、普段使いユーザーを使わない）は一切弱めていない。** SEC-01〜SEC-27、Trust Model、Mandatory Controls、Operator Gate、Explicit Non-Goals、Status（Draft v0.1）に変更はない
