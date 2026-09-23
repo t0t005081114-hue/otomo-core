@@ -128,7 +128,7 @@ PCの電源設定: Runnerを使う間はスリープしない設定にする。
 
 5. Runner Modeを記録する
 
-   採用したRunner Modeを、Runner Acceptanceの記録に明示する（`harness/REMOTE_REVIEW.md` §20 共通invariant）。Acceptanceを実施したmodeと、実運用で使うmodeを一致させる。
+   採用したRunner Modeを、Runner Acceptanceの記録に明示する（`harness/REMOTE_REVIEW.md` §20 共通invariant）。Acceptanceを実施したmodeと、実運用で使うmodeを一致させる。記録したmodeは、§6.1 Step 1がListenerのhostingから機械的に判定したmode（`DetectedMode`）と一致しなければならない。手入力のmode記録だけではPASSにしない（§6.1 Hosting mode判定）
 
 ### 5.1 Runner directoryのACL hardening（必須。起動前に行う）
 
@@ -485,6 +485,8 @@ Interactive runnerは、PCの再起動や `<runner-user>` のlogoffのあと **�
 3. §5の手順で、目的のmodeとして登録し直し、§5.1のhardeningと検証をやり直す（Service modeの登録はrootへrunner groupのexplicit ACEを付けるため、以前のhardening結果を流用しない）
 4. `harness/REMOTE_REVIEW.md` §20のmode固有checkを **変更後のmodeで再実施する**（旧modeのAcceptance結果を流用しない）
 
+step 2を行わずに、Service modeで登録したinstallationを `run.cmd` で起動しても、そのinstallationはInteractive modeの登録にならない（`.service` とWindows Serviceの登録が残る）。この状態は§6.1のHosting mode判定でInteractive modeとして受け入れられない（FAIL）。
+
 Node.js・Git・Codexを後からinstall / 更新した場合は、runner processを再起動する。
 
 - Interactive mode: `run.cmd` を停止して起動し直す
@@ -496,7 +498,7 @@ Node.js・Git・Codexを後からinstall / 更新した場合は、runner proces
 
 §20 Runner Acceptance Gate（共通invariant + 採用したmodeのmode固有check）が成立することを、以下のAT-02実行時に確認する。Interactive modeでは、共通invariant（専用runner user context・ACL検証・runner identity / run binding・Codex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・Evidence生成・採用modeの記録）に加えて次を記録する:
 
-- Runner Mode = Interactive
+- Runner Mode = Interactive。記録値だけでは足りない。§6.1 Step 1の `DetectedMode` が `Interactive` であり、Step 3を `-RunnerMode Interactive` で `BINDING CHECK: PASS` にしていること（§6.1 Hosting mode判定）
 - §5.1 のACL検証（tree全体）が、hardening直後とAT-02完了後の両方で `ACL CHECK: PASS` であること
 - **target installationのListener processが1つに特定され、その実ownerが `<runner-user>` であり、そのprocessがAT-02のGitHub Actions jobを実行したrunner登録・同じ稼働期間に結び付いていること（下記 §6.1。サインインしているshell userの自己申告では足りない）**
 - `run.cmd` 稼働中にGitHub上でOnline / Idleであること
@@ -517,6 +519,7 @@ Service modeを検証していない場合、Service modeの項目をPASSと記�
 target runner directory
   → そのinstallationの bin\Runner.Listener.exe で動く唯一のprocess（PID + 作成時刻）
   → そのprocessの実owner（SID）= 専用runner user
+  → そのprocessのhosting（親process chain・service登録状態）から判定したmode = 受け入れるRunner Mode
   → 同じdirectoryの .runner（agentId / agentName）
   → GitHub: 受け入れ対象run attemptのself-hosted jobを実行したrunner_id = agentId
   → job環境: metadata.json の run.id / run.attempt / run.runner_name
@@ -528,6 +531,7 @@ target runner directory
 
 - Step 1は **elevated（管理者）PowerShell** で実行する。非elevatedでは他ユーザーの `Runner.Listener` の `ExecutablePath` とownerが読めない（実機で `ExecutablePath` が空、`GetOwner` が ReturnValue 2）。その状態では曖昧さを解消できないため、scriptはFAILにする。Interactive modeでは、runner userのsessionで `run.cmd` を動かしたまま、別のAdministratorでelevated PowerShellを開く（runner userはlogoffしない）
 - runnerは、AT-02の `/review` を投稿する **60秒以上前** に起動しておく
+- Interactive modeでは、§5.2のとおり、runner directoryでPowerShellから `.\run.cmd` を実行して起動する（本手順が確認した起動方法）。既に開いている `cmd.exe` のpromptで `run.cmd` を実行すると、Listenerの親processのcommand lineに `run.cmd` が現れない。その場合はhosting modeを判定できないためFAILになる。Explorerからの起動等、他の方法は確認していない。親processのcommand lineで対象installationの `run.cmd` を確認できなければFAILになる
 - Step 1は、AT-02のjobが完了してから **60秒以上後** に、runnerを停止・再起動する前に実行する。runnerの自己更新や再起動が挟まるとprocessが変わるためFAILになる。その場合はAT-02からやり直す
 - Windowsの時刻同期が有効であること（`w32tm /query /source` が成功し、`Local CMOS Clock` / `Free-running System Clock` でない）
 - `.credentials` / `.credentials_rsaparams` は読まない・記録しない。本手順が読むのは `.runner` と、`_diag` の `Worker_*.log` の中の `run_id` の値だけである
@@ -537,7 +541,7 @@ target runner directory
 次を `Get-RunnerListenerEvidence.ps1` として §5.1のscriptと同様に保存し、実行する。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Get-RunnerListenerEvidence.ps1 -RunnerDir 'C:\actions-runner\<repository>' -RunnerUser '<runner-user>' -RunId <run-id> -OutFile listener.json
+powershell -NoProfile -ExecutionPolicy Bypass -File Get-RunnerListenerEvidence.ps1 -RunnerDir 'C:\actions-runner\<repository>' -RunnerUser '<runner-user>' -RunId <run-id> -RunnerMode Interactive -OutFile listener.json
 ```
 
 ```powershell
@@ -545,11 +549,71 @@ param(
     [Parameter(Mandatory)] [string] $RunnerDir,
     [Parameter(Mandatory)] [string] $RunnerUser,
     [Parameter(Mandatory)] [string] $RunId,
+    [Parameter(Mandatory)] [ValidateSet('Interactive', 'Service')] [string] $RunnerMode,
     [Parameter(Mandatory)] [string] $OutFile
 )
 $ErrorActionPreference = 'Stop'
 $fails = New-Object System.Collections.Generic.List[string]
 $rec = [ordered]@{}
+
+# Classifies the hosting of the target Listener from collected facts. Pure: no system access.
+# Returns 'Interactive' / 'Service' only when every condition of exactly one chain holds and
+# nothing conflicts; otherwise 'Unknown' with the reasons.
+function Resolve-RunnerHostingMode([hashtable] $F) {
+    $why = New-Object System.Collections.Generic.List[string]
+    $eq = { param($a, $b) $a -and $b -and [string]::Equals($a, $b, [System.StringComparison]::OrdinalIgnoreCase) }
+    $p = $F.Parent
+    $svc = @($F.Services)
+    $svcPids = @($F.RunnerServiceProcessIds)
+    $registration = $F.ServiceMarkerPresent -or $svc.Count -gt 0 -or $svcPids.Count -gt 0
+    if ($F.UnreadableRunnerServiceProcesses -gt 0) { $why.Add('RunnerService.exe process with unreadable path (cannot disambiguate)') }
+    if ($F.UnresolvedRunnerServices -gt 0) { $why.Add('actions.runner.* service with unreadable/unparsable PathName (cannot disambiguate)') }
+    if ($F.ServiceMarkerPresent -and $null -eq $F.ServiceMarker) { $why.Add('.service marker present but unreadable') }
+    $chain = $null
+    if (-not $p) { $why.Add('parent process not found (terminated or unreadable)') }
+    elseif (-not $p.Path) { $why.Add('parent ExecutablePath unreadable') }
+    elseif (-not $p.Created -or $p.Created -gt $F.ListenerCreated) { $why.Add('parent not created before the Listener (PID reuse or unreadable)') }
+    elseif (& $eq $p.Path $F.CmdExe) {
+        $chain = 'Interactive'
+        if (-not $p.CommandLine) { $why.Add('parent cmd.exe command line unreadable') }
+        elseif ($p.CommandLine -notmatch ('(^|[\s"])' + [regex]::Escape($F.RunCmd) + '($|[\s"])')) { $why.Add('parent cmd.exe is not running this installation''s run.cmd') }
+        if (-not (& $eq $p.OwnerSid $F.RunnerSid)) { $why.Add('parent cmd.exe owner is not the runner user (or unreadable)') }
+        if ($null -eq $F.ListenerSessionId -or $F.ListenerSessionId -eq 0) { $why.Add('Listener is not in an interactive session (session 0 or unreadable)') }
+        if (-not $F.ListenerCommandLine) { $why.Add('Listener command line unreadable') }
+        elseif ($F.ListenerCommandLine -match '--startuptype\s+service') { $why.Add('Listener was started with --startuptype service') }
+        if ($registration) { $why.Add('service registration of this installation present (.service marker / service / RunnerService process); Setup 5.5 mode change not completed') }
+    }
+    elseif (& $eq $p.Path $F.ServiceExe) {
+        $chain = 'Service'
+        if ($svc.Count -ne 1) { $why.Add("services registered for this installation's RunnerService.exe: $($svc.Count) (exactly 1 required)") }
+        else {
+            $s = $svc[0]
+            if ($s.State -ne 'Running') { $why.Add("service state is '$($s.State)'") }
+            if ([string]$s.ProcessId -ne [string]$p.Pid) { $why.Add('service ProcessId is not the Listener parent') }
+            if (-not (& $eq $s.StartNameSid $F.RunnerSid)) { $why.Add('service StartName is not the runner user (or unresolvable)') }
+            if (-not $F.ServiceMarkerPresent -or -not (& $eq $F.ServiceMarker $s.Name)) { $why.Add('.service marker absent or does not name the running service') }
+        }
+        if ($svcPids.Count -ne 1) { $why.Add("RunnerService.exe processes of this installation: $($svcPids.Count) (exactly 1 required)") }
+        if ($null -eq $F.ListenerSessionId -or $F.ListenerSessionId -ne 0) { $why.Add('service-hosted Listener is not in session 0 (or unreadable)') }
+        if (-not $F.ListenerCommandLine -or $F.ListenerCommandLine -notmatch '--startuptype\s+service') { $why.Add('Listener command line lacks --startuptype service (or unreadable)') }
+    }
+    else { $why.Add('parent is neither cmd.exe running this installation''s run.cmd nor this installation''s RunnerService.exe') }
+    [pscustomobject]@{ Detected = $(if ($chain -and -not $why.Count) { $chain } else { 'Unknown' }); Chain = $chain; Reasons = @($why) }
+}
+
+function Get-ExeFromPathName([string] $PathName) {
+    if (-not $PathName) { return $null }
+    $t = $PathName.Trim()
+    if ($t.StartsWith('"')) { $e = $t.IndexOf('"', 1); if ($e -lt 1) { return $null }; $t = $t.Substring(1, $e - 1) }
+    else { $i = $t.IndexOf('.exe', [System.StringComparison]::OrdinalIgnoreCase); if ($i -lt 0) { return $null }; $t = $t.Substring(0, $i + 4) }
+    try { [System.IO.Path]::GetFullPath($t) } catch { $null }
+}
+
+function ConvertTo-SidValue([string] $Account) {
+    if (-not $Account) { return $null }
+    if ($Account.StartsWith('.\')) { $Account = "$env:COMPUTERNAME\" + $Account.Substring(2) }
+    try { (New-Object System.Security.Principal.NTAccount($Account)).Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $null }
+}
 
 # Must run elevated: otherwise other users' Runner.Listener processes hide ExecutablePath and owner.
 $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -562,6 +626,8 @@ $expected  = [System.IO.Path]::GetFullPath((Join-Path $RunnerDir 'bin\Runner.Lis
 $RunnerSid = (New-Object System.Security.Principal.NTAccount($env:COMPUTERNAME, $RunnerUser)).Translate(
     [System.Security.Principal.SecurityIdentifier]).Value
 $rec.RunnerDir = $RunnerDir
+$rec.RunnerMode = $RunnerMode
+$rec.DetectedMode = 'Unknown'
 
 # 1. Listener process: exactly one Runner.Listener.exe whose ExecutablePath is this installation's bin.
 $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Runner.Listener.exe'")
@@ -582,6 +648,64 @@ if ($m.Count -ne 1) {
     $rec.ListenerOwner = "$($o.Domain)\$($o.User)"
     if ($o.ReturnValue -ne 0 -or $s.ReturnValue -ne 0) { $fails.Add('process owner unreadable') }
     elseif ($s.Sid -ne $RunnerSid) { $fails.Add("owner mismatch ($($rec.ListenerOwner))") }
+
+    # 1b. Hosting mode of this exact Listener: parent chain (primary) + service registration state (conflict detection).
+    $cmdExe = [System.IO.Path]::GetFullPath((Join-Path $env:SystemRoot 'System32\cmd.exe'))
+    $svcExe = [System.IO.Path]::GetFullPath((Join-Path $RunnerDir 'bin\RunnerService.exe'))
+    $parent = $null
+    $pp = @(Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$p.ParentProcessId)")
+    if ($pp.Count -eq 1) {
+        $q = $pp[0]
+        $qs = Invoke-CimMethod -InputObject $q -MethodName GetOwnerSid
+        $parent = @{
+            Pid         = $q.ProcessId
+            Created     = $(if ($q.CreationDate) { $q.CreationDate.ToUniversalTime() } else { $null })
+            Path        = $(if ($q.ExecutablePath) { [System.IO.Path]::GetFullPath($q.ExecutablePath) } else { $null })
+            CommandLine = $q.CommandLine
+            OwnerSid    = $(if ($qs.ReturnValue -eq 0) { $qs.Sid } else { $null })
+        }
+    }
+    $services = @(); $unresolved = 0
+    foreach ($sv in @(Get-CimInstance Win32_Service)) {
+        $exe = Get-ExeFromPathName $sv.PathName
+        if (-not $exe) { if ($sv.Name -like 'actions.runner.*') { $unresolved++ }; continue }
+        if ([string]::Equals($exe, $svcExe, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $services += @{ Name = $sv.Name; State = $sv.State; StartMode = $sv.StartMode; ProcessId = $sv.ProcessId
+                            StartNameSid = (ConvertTo-SidValue $sv.StartName) }
+        }
+    }
+    $svcPids = @(); $unreadableSvcProcs = 0
+    foreach ($rp in @(Get-CimInstance Win32_Process -Filter "Name = 'RunnerService.exe'")) {
+        if (-not $rp.ExecutablePath) { $unreadableSvcProcs++ }
+        elseif ([string]::Equals([System.IO.Path]::GetFullPath($rp.ExecutablePath), $svcExe, [System.StringComparison]::OrdinalIgnoreCase)) { $svcPids += $rp.ProcessId }
+    }
+    $markerPath = Join-Path $RunnerDir '.service'
+    $markerPresent = Test-Path -LiteralPath $markerPath
+    $marker = $null
+    if ($markerPresent) { try { $marker = (Get-Content -Raw -LiteralPath $markerPath).Trim() } catch { $marker = $null } }
+
+    $h = Resolve-RunnerHostingMode @{
+        Parent = $parent; ListenerCreated = $p.CreationDate.ToUniversalTime(); ListenerSessionId = $p.SessionId
+        ListenerCommandLine = $p.CommandLine; CmdExe = $cmdExe; ServiceExe = $svcExe
+        RunCmd = (Join-Path $RunnerDir 'run.cmd'); RunnerSid = $RunnerSid; Services = $services
+        UnresolvedRunnerServices = $unresolved; RunnerServiceProcessIds = $svcPids
+        UnreadableRunnerServiceProcesses = $unreadableSvcProcs; ServiceMarkerPresent = $markerPresent; ServiceMarker = $marker
+    }
+    $rec.DetectedMode = $h.Detected
+    $rec.Hosting = [ordered]@{
+        ParentPid              = $(if ($parent) { $parent.Pid } else { $null })
+        ParentCreatedUtc       = $(if ($parent -and $parent.Created) { $parent.Created.ToString('o') } else { $null })
+        ParentPath             = $(if ($parent) { $parent.Path } else { $null })
+        ParentOwnerIsRunnerUser = [bool]($parent -and $parent.OwnerSid -eq $RunnerSid)
+        ListenerSessionId      = $p.SessionId
+        ServiceMarkerPresent   = $markerPresent
+        TargetServices         = @($services | ForEach-Object { [ordered]@{ Name = $_.Name; State = $_.State; StartMode = $_.StartMode
+                                    ProcessId = $_.ProcessId; StartNameIsRunnerUser = ($_.StartNameSid -eq $RunnerSid) } })
+        RunnerServiceProcesses = $svcPids.Count
+        Reasons                = $h.Reasons
+    }
+    foreach ($r in $h.Reasons) { $fails.Add("hosting: $r") }
+    if ($h.Detected -ne $RunnerMode) { $fails.Add("detected hosting mode '$($h.Detected)' != selected Runner Mode '$RunnerMode'") }
 }
 
 # 2. Local registration of the same installation (.runner only; never read .credentials*).
@@ -612,7 +736,7 @@ $rec.RunId       = $RunId
 $rec.CapturedUtc = (Get-Date).ToUniversalTime().ToString('o')
 $rec.Failures    = @($fails)
 $rec.Result      = if ($fails.Count) { 'FAIL' } else { 'PASS' }
-$rec | ConvertTo-Json | Set-Content -LiteralPath $OutFile -Encoding UTF8
+$rec | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding UTF8
 $fails | ForEach-Object { "  $_" }
 "LISTENER CHECK: $($rec.Result)"
 if ($fails.Count) { exit 1 } else { exit 0 }
@@ -620,6 +744,36 @@ if ($fails.Count) { exit 1 } else { exit 0 }
 
 - 同じ機会に、§5.1の検証 (2)（`Test-RunnerAcl.ps1`）も実行する
 - `LISTENER CHECK: PASS`（exit code 0）でなければ **§20 FAIL**
+- `-RunnerMode` には、受け入れるRunner Mode（本Pilotでは `Interactive`）を渡す
+
+#### Hosting mode判定（2026-09-23 Round 4、CORE-RR-L2-003）
+
+Runner Modeは手入力の記録ではなく、**受け入れ対象Listenerそのものがどうhostされているか**から判定する。Step 1 scriptの `Resolve-RunnerHostingMode` が次の規則で `DetectedMode` を決める。
+
+- 一次情報は、実行中のListenerの親process（PID + 作成時刻）である
+- service登録状態（`.service` marker・Windows Service・`RunnerService.exe` process）は、補助情報と矛盾の検出に使う
+- `.service` があることだけでService modeとはみなさない。serviceが停止していることだけでInteractive modeとはみなさない
+
+| 判定 | すべて満たすこと |
+|---|---|
+| `Interactive` | 親processが存在し、Listenerより前に作成されている（PIDの再利用を除く）。親processの実行fileが `%SystemRoot%\System32\cmd.exe` である。そのcommand lineが対象installationの `run.cmd` を実行している。親processのownerが専用runner userである。Listenerが対話session（session 0以外）にある。Listenerのcommand lineに `--startuptype service` が無い。**対象installationのservice登録が1つも無い**（`.service` が無い。実行fileが対象installationの `bin\RunnerService.exe` であるWindows Serviceが状態によらず無い。そのpathの `RunnerService.exe` processが無い） |
+| `Service` | 親processが存在し、Listenerより前に作成されている。親processの実行fileが対象installationの `bin\RunnerService.exe` である。その実行fileを持つWindows Serviceがちょうど1つある。そのserviceが `Running` で、`ProcessId` が親processのPIDと一致し、`StartName` が専用runner userである。`.service` がそのservice名を示している。そのpathの `RunnerService.exe` processがちょうど1つである。Listenerがsession 0にある。Listenerのcommand lineに `--startuptype service` がある |
+| `Unknown` | 上記のどちらでもない。または、次のいずれかに当たる: 親processを取得できない（終了済みを含む）。親の実行file path・command line・owner・作成時刻を読めない。`actions.runner.*` serviceのpathを解釈できない。path不明の `RunnerService.exe` processがある。`.service` を読めない。Interactiveの連鎖とservice登録が併存する |
+
+`DetectedMode` が `-RunnerMode` と一致しない場合（`Unknown` を含む）、Step 1は `LISTENER CHECK: FAIL` になる。Step 3は `listener.json` の `RunnerMode` / `DetectedMode` を、Step 3に渡す `-RunnerMode` と照合する。mode fieldの無い旧形式の `listener.json` もFAILになる。
+
+**Interactive modeでservice登録が残っている場合**: §5の登録手順では、Interactive modeはserviceを作らずに登録する（`Would you like to run the runner as service?` に `N`、非対話登録では `--runasservice` を付けない）。§5.5では、modeの変更に `config.cmd remove` と再登録が必要である。したがって、対象installationにservice登録が残っている状態は、Interactive modeの登録が完了していない状態である。`run.cmd` で起動したListenerがあっても、Interactive modeとしては受け入れない（`Unknown`、FAIL）。
+
+- 特定のrunnerをこの状態からどう戻すか（§5.5の手順で登録し直す等）はoperatorの判断で行う。本scriptは状態を判定・記録するだけで、runnerを変更しない
+- service登録が残った状態をInteractive modeとして認める運用は定義していない。認める場合は、Human Decisionとして §20 と本節を改訂する
+
+判定の根拠として実機で確認した事項（2026-09-23、runner 2.337.0、読み取りのみ）:
+
+- `run.cmd` は `run-helper.cmd` を `call` で呼ぶ。`call` は同じ `cmd.exe` process内でbatchを実行する。そのため、Listenerの親processは `run.cmd` を実行している `cmd.exe` になる。PowerShellから `.\run.cmd` を実行すると、その `cmd.exe` のcommand lineは `cmd.exe /c ""<runner-dir>\run.cmd""` になる（使い捨てdirectoryの実processで確認）
+- `bin\RunnerService.exe` はListenerを `Runner.Listener.exe` と `run --startuptype service` で起動する（実行fileの文字列で確認）
+- service登録が残っているPilot runnerでは、Windows Serviceの実行fileが `"<runner-dir>\bin\RunnerService.exe"` で、`.service` の内容がそのservice名と一致した
+
+Service modeの連鎖は、実際のService mode runnerでは実行していない（未検証）。下記の検証は模擬dataによる。Service modeを採用するときは、そのmodeのAcceptanceで確認する。判定できなければFAILになる（fail closed）。
 
 #### Step 2: GitHub側evidence（repositoryを読めるoperator環境）
 
@@ -638,7 +792,7 @@ gh run download <run-id> -R <owner>/<repository> -n remote-review-evidence -D ev
 次を `Test-RunnerRunBinding.ps1` として保存し、実行する。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Test-RunnerRunBinding.ps1 -ListenerFile listener.json -JobsFile jobs.json -MetadataFile evidence\metadata.json -RunId <run-id> -RunAttempt <attempt>
+powershell -NoProfile -ExecutionPolicy Bypass -File Test-RunnerRunBinding.ps1 -ListenerFile listener.json -JobsFile jobs.json -MetadataFile evidence\metadata.json -RunId <run-id> -RunAttempt <attempt> -RunnerMode Interactive
 ```
 
 ```powershell
@@ -648,6 +802,7 @@ param(
     [Parameter(Mandatory)] [string] $MetadataFile,   # metadata.json from the run's remote-review-evidence Artifact
     [Parameter(Mandatory)] [string] $RunId,
     [Parameter(Mandatory)] [string] $RunAttempt,
+    [Parameter(Mandatory)] [ValidateSet('Interactive', 'Service')] [string] $RunnerMode,   # the mode being accepted
     [string] $JobName = 'Verify and review (self-hosted)',
     [int] $MarginSeconds = 60
 )
@@ -662,6 +817,9 @@ $meta = Get-Content -Raw -LiteralPath $MetadataFile | ConvertFrom-Json
 # Local side
 if ($l.Result -ne 'PASS') { $fails.Add('listener evidence is not PASS') }
 if ([string]$l.RunId -ne $RunId) { $fails.Add('listener evidence captured for a different run ID') }
+# Hosting mode: the accepted mode must be the mode the evidence was captured for and the mode detected from the Listener's hosting
+if ([string]$l.RunnerMode -ne $RunnerMode)   { $fails.Add("listener evidence captured for Runner Mode '$($l.RunnerMode)', not '$RunnerMode'") }
+if ([string]$l.DetectedMode -ne $RunnerMode) { $fails.Add("detected hosting mode '$($l.DetectedMode)' != accepted Runner Mode '$RunnerMode'") }
 
 # GitHub side: exactly one self-hosted review job in this run attempt, executed by this registration
 $j = @($jobs | Where-Object { $_.name -eq $JobName })
@@ -705,12 +863,13 @@ if ($fails.Count) { 'BINDING CHECK: FAIL'; exit 1 }
 | 実行環境 | elevatedでない / 他のListenerの `ExecutablePath` が読めない / 時刻同期を確認できない |
 | Listener | target installationの `bin\Runner.Listener.exe` と一致するprocessが0件、または2件以上（最初の1件を選ばない） |
 | owner | ownerを取得できない / owner SIDが専用runner userと一致しない |
+| hosting mode | `DetectedMode` が `Unknown`（上記 Hosting mode判定: 親processを特定・読めない、Interactive / Serviceどちらの連鎖の条件も満たさない、Interactiveの連鎖と対象installationのservice登録が併存する 等） / `DetectedMode` が `-RunnerMode` と一致しない |
 | local registration | `.runner` が読めない / `agentId` か `agentName` が無い |
 | GitHub job | 対象run attemptのself-hosted jobが1件でない / `completed` でない / `run_id` か `run_attempt` が不一致 / `runner_id` が `agentId` と不一致（nullを含む） / `runner_name` が `agentName` と不一致 |
 | job環境 | `metadata.json` の `run.id` か `run.attempt` が不一致 / `run.runner_name` が `agentName` と不一致、または欠落 |
 | local trace | 同じinstallationの `_diag` に、`run_id` が対象run IDのWorker logが1件でない |
 | timing | 下記Timing ruleを満たさない / 判定に必要な時刻が欠落している |
-| 証跡の対応 | `listener.json` が別のrun ID向けに取得されている / Step 1がPASSでない |
+| 証跡の対応 | `listener.json` が別のrun ID向けに取得されている / Step 1がPASSでない / `listener.json` の `RunnerMode` か `DetectedMode` がStep 3の `-RunnerMode` と一致しない（mode fieldの無い旧形式を含む） |
 
 #### Timing rule
 
@@ -726,6 +885,21 @@ if ($fails.Count) { 'BINDING CHECK: FAIL'; exit 1 }
 - `.runner` に `agentId` / `agentName` がある。2026-09-16のPilot runについて、jobs APIの `runner_id` / `runner_name`、`metadata.json` の `run.id` / `run.attempt` / `run.runner_name`、`_diag` のWorker logの `run_id` が互いに一致することを実データで確認した（Step 3 scriptがPASS。Listenerのprocess fieldは、当時のprocessが既に存在しないため合成値）
 - Step 3 scriptは、agentId不一致・agentName不一致・別run ID・別attempt・metadataのrunner_name欠落・`runner_id` null・job未完了・self-hosted job 0件 / 2件・Worker log欠落 / 範囲外・Listener作成がjob開始より後 / 60秒未満前・取得がjob完了前、のすべてでFAILした
 - Step 1 scriptは、同じ名前のListenerを3つ（target・別installation・targetとprefixが同じsibling directory）動かした状態でtargetのPIDだけを選んだ。0件・同一installationから2件・owner不一致・`.runner` の `agentId` 欠落・Worker log無しでFAILした。非elevatedでは、elevatedでないこと・他ユーザーのListenerのpathが読めないこと・`w32tm` が失敗することでFAILした（検証環境は非elevatedのため、Step 1のPASS経路は本番Acceptance時にelevated環境で確認する）
+- Hosting mode判定（2026-09-23 Round 4）:
+  - `Resolve-RunnerHostingMode` を本節のscriptから抽出し、模擬dataで37件を確認した。`Interactive` 2件、`Service` 1件、それ以外の34件はすべて `Unknown` だった。`Unknown` の34件の内訳は次のとおり
+    - Interactiveの連鎖とservice登録の併存（`.service`、停止中のManual service、両方の併存＝Pilot runnerで観測した状態、`RunnerService.exe` process）
+    - Listenerの `--startuptype service`、session 0のInteractive
+    - Serviceの連鎖の不成立（serviceが停止中、`ProcessId` 不一致、serviceが2つ、`StartName` が別アカウント・解決不能、`.service` が無い・別service名、session 0以外、`--startuptype service` が無い、`RunnerService.exe` processが2つ）
+    - 親processの不成立（無い、path・作成時刻・command line・ownerが読めない、Listenerより後に作成、sibling installationの `run.cmd`、pathの途中に対象pathを含む `run.cmd`、owner不一致、`powershell.exe`、既存のcmd prompt、別installationの `RunnerService.exe`、System32以外の `cmd.exe`）
+    - 読めない情報（Listenerのcommand line・session、path不明の `RunnerService.exe`、解釈できないservice path、読めない `.service`）
+  - 使い捨てdirectoryに実際の `run.cmd` / `run-helper.cmd.template` と、待機するだけの代替 `Runner.Listener.exe` を置き、実processで確認した。runner userは検証者自身、非elevatedである
+    - PowerShellから `.\run.cmd` で起動した場合は、`DetectedMode` が `Interactive` になり、hosting起因のfailureは無かった
+    - 同じprocessに `-RunnerMode Service` を渡すとmode不一致でFAILした
+    - `.service` を置いたdirectoryでは `Unknown`（service登録の併存）になった
+    - 親processが終了済みの直接起動では `Unknown` になった
+    - 非elevatedであること・他ユーザーのListenerのpathが読めないこと・`w32tm` の失敗によるFAILは、従来どおり出た
+  - Step 3 scriptは、Clean-roomで取得した実run（2026-09-23）の `listener.json` にmode fieldを加えた場合にPASSした。mode fieldの無い旧形式、選択Interactive + 判定Service、選択Service + 判定Interactive、判定Unknown、別modeの証跡ではFAILした。従来のFAIL条件17件（agentId / agentName不一致、別run ID・attempt、metadataの不一致・欠落、`runner_id` null、job未完了、self-hosted job 0件 / 2件、Worker log欠落・範囲外、Listener作成時刻、取得時刻、Step 1非PASS、別run向けの証跡）は、すべて引き続きFAILした
+  - Service modeのPASS経路は模擬dataだけで確認した。実service・elevatedでのPASS経路は、次のClean-room / Acceptanceで確認する
 - Worker logの `run_id` の形式は runner 2.337.0 で確認したものである。runnerの更新で形式が変わり見つからなくなった場合、Step 1はFAILになる（fail closed）。その場合は本手順の更新が必要になる
 
 #### 記録するもの
@@ -735,7 +909,8 @@ Durable Acceptance Record（`harness/REMOTE_REVIEW.md` §20）へ、`listener.js
 | 項目 | 取得元 |
 |---|---|
 | runner directory | `RunnerDir` |
-| Runner Mode | Interactive / Service |
+| Runner Mode | `RunnerMode`（選択したmode）と `DetectedMode`（hostingからの判定）。一致しなければFAIL |
+| hosting | `Hosting` の各項目: 親processのPID・作成時刻・path、親processのownerがrunner userか、Listenerのsession、`.service` の有無、対象installationのserviceの状態・StartMode、StartNameがrunner userか、`RunnerService.exe` process数、判定理由 |
 | 専用runner user | 設定値 |
 | ACL検証 | §5.1 検証 (1)・(2) の結果 |
 | local registration | `RunnerAgentId` / `RunnerAgentName` |
@@ -818,3 +993,4 @@ Durable Acceptance Record（`harness/REMOTE_REVIEW.md` §20）へ、`listener.js
 - 2026-09-23 L2 Independent Review remediation Round 1（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: (1) 登録手順にRunner directoryのACL hardeningが無く、既定NTFS権限のままでは通常アカウントがrunner binary・`_work` を書き換えられた。§5.1 Runner directoryのACL hardening を新設し、`icacls /inheritance:r` + SYSTEM（`*S-1-5-18`）/ Administrators（`*S-1-5-32-544`）/ 専用runner user への `(OI)(CI)F` 付与と、`Get-Acl` による検証scriptを追加した。Service modeでrunnerが作る `GITHUB_ActionsRunner_*` groupがInteractive modeでは作られないため、継承ACEを外す際にrunner userへ明示付与しないとrunnerが `_work` / `_diag` へ書けなくなる点も明記した。コマンドは runner 2.337.0 / Windows 10 Pro 上で、hardening前後に対してFAIL / PASS双方が出ることを実機確認済み。(2) §6へ 6.1 Identity Evidence を新設し、`Get-CimInstance Win32_Process` + `Invoke-CimMethod GetOwner` による `Runner.Listener` の実 process owner確認（`whoami` では代替しない）と、run ID・runner name・採用mode・ACL検証結果を1つの記録として結び付ける Run binding 表を追加した。構文は実機の稼働processに対して `Domain\User` / `ReturnValue 0` を返すことを確認済み。**節番号の変更**: §5.1の新設に伴い、従来の §5.1 起動 / §5.2 停止 / §5.3 再起動・logoff / §5.4 Mode変更 を、それぞれ §5.2 / §5.3 / §5.4 / §5.5 へ繰り下げ、本文中の参照（§5 step 4、§7 Troubleshooting、§8 停止・削除）を更新した。2026-09-23の前エントリ本文にある「§5.1〜§5.4」の表記は当時の節番号であり、現在は§5.2〜§5.5を指す。**専用 `<runner-user>` 運用、Administrators非追加、Codex以外の認証情報を置かない要求、Runner Mode（Interactive採用）、AT-01〜AT-29は変更していない**
 - 2026-09-23 L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: Round 2のwhole-PR再レビューで、両Findingが未解消と判定された。(1) CORE-RR-L2-001: 旧§5.1の検証はrootだけを見て、許可集合外のidentityが無いことしか判定しておらず、必須principalの存在・Allow / Deny・必須right・descendant・ownerを確認していなかった。旧手順の `/inheritance:r` は継承ACEしか消さず、`/grant` は追加であるため、rootの既存explicit ACE（Pilot runnerではrunner groupのexplicit FullControl ACE）とdescendantのexplicit ACE・保護が残った。§5.1を、tree全体のinvariant（許可principal3つだけ・必須FullControl・Deny無し・root protected・protected descendant無し・owner制限・reparse point無し・全commandのexit code確認）、`icacls` semanticsの表、`/reset /T` → `/setowner /T` → `/grant:r` → `/inheritance:r` のhardening script、tree全体を走査する検証scriptへ置き換えた。`GITHUB_ActionsRunner_*` groupは許可principalから外した（membershipの汎用検証を定義できないため）。使い捨てdirectoryでPASS 3件・FAIL 13件・例外停止2件のtestを実施した。本番runner directoryのACLは変更していない。(2) CORE-RR-L2-002: 旧§6.1はprocess名だけでListenerを選び、PIDとownerを手作業でrun IDとrunner nameへ対応付けていた。§6.1を Runner Identity and Run Binding へ置き換え、target installationの `bin\Runner.Listener.exe` と一致するprocessがちょうど1つであること、owner SID、作成時刻、同じdirectoryの `.runner`（`agentId` / `agentName`）、jobs APIの `runner_id` / `runner_name` / `started_at` / `completed_at`、既存 `metadata.json` の `run.id` / `run.attempt` / `run.runner_name`、同じinstallationの `_diag` のWorker logの `run_id` を結び付けるscriptと、PID + 作成時刻によるTiming rule（60秒の余裕）を定義した。§6の番号付き手順へ §6.2 の見出しを付けた。§5.5へ、Mode変更時に§5.1をやり直すことを追加した。**Evidence Schema・workflow・script実装・permissions・AT-01〜AT-29・Runner Mode（Interactive採用）・専用 `<runner-user>` 運用は変更していない**
 - 2026-09-23 L2 Independent Re-review remediation Round 3（pre-mutation reparse-point handling、Blocking、docs-only）: Round 3のwhole-PR再レビューで、hardeningが `icacls /reset /T` と `/setowner /T` を、reparse pointの無いことを確認する前に実行していた点が新しいBlockingとされた。実機で、`icacls /reset /T`・`/reset /T /L`・`/grant /T` がtree内のdirectory junctionを辿ってtree外のACLを変更すること、root単独の `/grant:r`・`/inheritance:r` は変更しないことを確認した。§5.1のhardening scriptを、Phase A（rootとancestorのreparse point確認、変更なし）→ Phase B（root単独の隔離とfile IDの再確認）→ Phase C（reparse pointを辿らない棚卸し。reparse point・読み取り失敗で停止。許可外principalのdirectory footholdを `/T` 無しで閉じ、再度棚卸し）→ Phase D（rootの子にだけ `/reset /T`・`/setowner /T`）へ置き換えた。`icacls` semanticsの表へ `/remove`・`/L`・junctionの実測結果を追加し、「reparse pointとraceの扱い」を新設した（Administrator / runner user / root差し替え / fileの残差を明記）。`takeown` の復旧手順から `/R` を外した。negative testへ、tree外junction・root junction・ancestor junction・深いjunction・foothold内junction・列挙失敗・Deny・clean PASS・foothold除去PASSと、Round 2手順がtree外を変更する対照を追加した。Round 2のnegative testは新scriptで再実行し同じ結果（「全mutationを混ぜたtree」のDeny対象だけ変更、理由を明記）。**Evidence Schema・workflow・script実装・permissions・AT-01〜AT-29・Runner Mode（Interactive採用）・専用 `<runner-user>` 運用・§6.1のrunner / run bindingは変更していない**
+- 2026-09-23 L2 Independent Re-review remediation Round 4（CORE-RR-L2-003、Blocking、docs-only）: Final whole-PR L2再レビューで、Interactive modeのAcceptanceが「Runner Mode = Interactive」を記録するだけで、受け入れ対象Listenerが実際にInteractiveでhostされていることを機械的に証明していない点がBlockingとされた（Pilot runnerには、停止中のManual service登録と `.service` markerが、動作中のListenerと併存していた）。§6.1 Step 1（`Get-RunnerListenerEvidence.ps1`）へ必須の `-RunnerMode` と、Listenerの親process chain（PID + 作成時刻、実行file、command line、owner）・session・command lineを一次情報とし、`.service` / Windows Service / `RunnerService.exe` processを矛盾検出に使うHosting mode判定（`Resolve-RunnerHostingMode`）を追加した。判定できない・矛盾する・選択modeと異なる場合は `LISTENER CHECK: FAIL`。Step 3（`Test-RunnerRunBinding.ps1`）へ必須の `-RunnerMode` を追加し、`listener.json` の `RunnerMode` / `DetectedMode` と照合する。§5 step 5・§5.5・§6・判定規則・記録するものを更新し、Hosting mode判定の節を新設した。対象installationにservice登録が残っている状態をInteractive modeとして受け入れない根拠は、既存の§5（Interactive modeはserviceを作らずに登録する）と§5.5（mode変更には `config.cmd remove` と再登録が必要）である。service登録の併存を認める運用は定義していない。既存のStep 1 / Step 3のcheckは削除・緩和していない。変更は追加だけで、`listener.json` の出力は入れ子の `Hosting` を保持するため `ConvertTo-Json -Depth 5` とした。**Evidence Schema 1.1・`metadata.json`・SEC-01〜SEC-27・AT-01〜AT-29・workflow・permissions・§5.1のACL hardening / 検証script・Runner Mode（Interactive採用）・専用 `<runner-user>` 運用は変更していない。本番runnerのACL・登録・modeは変更していない**

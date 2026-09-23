@@ -770,6 +770,7 @@ Formal Runner Acceptanceの構成は次のとおりであり、特定のprocess 
 - **Runner directory tree全体のACLとownerが、SYSTEM / Administrators / 専用runner user の3 principalに限定され、必須rightが揃っている**（下記 Runner Directory ACL Invariant）
 - **target installationのRunner process・その実owner・local runner登録・受け入れ対象のGitHub Actions jobが、機械的な1本の連鎖として結び付いている**（下記 Principal Identity Evidence。自己申告・サインイン観察・process名だけの特定では足りない）
 - 採用したRunner Mode（Interactive / Service）が明示的に記録されている
+- 記録したRunner Modeが、受け入れ対象Listenerの実際のhosting（親process chainとservice登録状態）から機械的に判定したmodeと一致している（下記 Principal Identity Evidence。手入力のmode記録だけではPASSにしない。2026-09-23 Round 4、CORE-RR-L2-003）
 - Acceptanceを実施したRunner Modeが、実運用で使うRunner Modeと一致している
 - Codexが実際に起動できる（`codex --version` 相当）
 - read-onlyコマンドを実行できる（`TOOL_CHECK` がVERIFIEDになる）
@@ -808,6 +809,7 @@ Service modeの登録でrunnerが作る `GITHUB_ActionsRunner_*` groupは、許�
 target runner directory
   → そのinstallationのListener process（ちょうど1つ）
   → そのprocessの実owner
+  → そのprocessのhostingから判定したRunner Mode
   → 同じinstallationのlocal runner登録
   → 受け入れ対象GitHub Actions run attemptのself-hosted job
   → Durable Acceptance Record
@@ -815,6 +817,10 @@ target runner directory
 
 - Listenerをprocess名ではなく、target installationの実行fileのpathで特定する。一致が0件・複数件ならFAILとし、最初の1件を選ばない。他のListenerのpathを読めず曖昧さを解消できない場合もFAIL
 - processの実ownerが専用runner userと一致する（`whoami` はshellの実行者を示すだけで、これを代替しない）
+- **Hosting mode**（2026-09-23 Round 4、CORE-RR-L2-003）: そのListenerがどうhostされているかから、Runner Modeを機械的に判定する。一次情報は実行中のprocess（親process chain・session）とし、service登録状態は矛盾の検出に使う。`.service` の有無やserviceの停止だけでmodeを決めない。Interactive modeは、serviceを作らずに登録し（`harness/REMOTE_REVIEW_SETUP.md` §5）、modeの変更に登録のやり直しを要する（同 §5.5）。そのため、Interactive modeは次の両方で判定する
+  - Listenerが、対象installationの `run.cmd` を実行するrunner userの対話sessionのprocessからhostされている
+  - 対象installationのservice登録が残っていない
+- Service modeは、対象installationの唯一の実行中serviceがListenerをhostしていることで判定する。StartNameは専用runner userである。判定できない・証跡が矛盾する・記録したmodeと異なる場合はFAIL
 - runner登録のidentityを、同じinstallationのlocal登録情報から導出する。それが、GitHub側で受け入れ対象jobを実行したrunnerの識別子と一致する。runner nameは一意である保証が無いため、nameだけで一致とみなさない
 - job環境で記録された run ID / run attempt / runner name（既存Evidenceの `metadata.json` `run`）が、受け入れ対象runとlocal登録に一致する
 - 同じinstallationのlocal traceに、受け入れ対象runの記録がある
@@ -837,7 +843,7 @@ Runner Acceptanceの結果は、AI sessionやSetup作業の手元だけに残さ
 | 項目 | 例 |
 |---|---|
 | どのrunner directory | path |
-| どのmode | Interactive / Service |
+| どのmode | Interactive / Service。記録したmodeと、Listenerのhostingから機械的に判定したmode、およびその判定の証跡（親process・service登録状態） |
 | どのWindows principal | 専用runner user、Listenerのprocess owner |
 | ACL検証 | hardening直後・AT-02完了後それぞれのPASS / FAIL |
 | どのlocal runner登録 | local登録情報のrunner識別子・runner name |
@@ -850,7 +856,7 @@ Runner Acceptanceの結果は、AI sessionやSetup作業の手元だけに残さ
 | 実施日 | 日付 |
 | 総合判定 | PASS / FAIL |
 
-必須のbinding証跡（上表のdirectory・principal・ACL・local登録・process・GitHub run・job環境・local trace・timing）が1つでも欠けている記録は、**§20 FAIL** とする。
+必須のbinding証跡（上表のdirectory・mode・principal・ACL・local登録・process・GitHub run・job環境・local trace・timing）が1つでも欠けている記録は、**§20 FAIL** とする。
 
 password・token・SID値・個人のhome path・無関係な個人情報を記録しない（`harness/DEVELOPMENT_STANDARDS.md` §5 Evidence Integrity）。hostnameは必要なら一般名へ置換してよい。
 
@@ -867,10 +873,11 @@ Interactive modeで本番投入する場合、上記に加えて次を確認す�
 7. runner processを停止すると、GitHub上でrunnerがOffline / 利用不可になり、新しいRemote Review jobが開始されない
 8. service modeでの動作を主張しない（Service modeを実際に検証していない限り、Service mode側をPASSと記録しない）
 9. Runner directory ACL検証（`harness/REMOTE_REVIEW_SETUP.md` §5.1、tree全体）が、hardening直後とAT-02完了後の両方で `ACL CHECK: PASS` である
+10. 受け入れ対象Listenerのhostingが機械的に `Interactive` と判定され、対象installationのservice登録が残っていない（Principal Identity Evidenceの Hosting mode、`harness/REMOTE_REVIEW_SETUP.md` §6.1 Hosting mode判定）。「Runner Mode = Interactive」という記録だけでこの項目をPASSにしない
 
 ### Service mode固有check
 
-Service modeを採用する場合は、Service mode自身のcheck（非対話service contextでのCodex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・Evidence生成）を別途実施する。Interactive modeのPASSは、Service modeのAcceptanceを代替しない。
+Service modeを採用する場合は、Service mode自身のcheck（非対話service contextでのCodex起動・read-onlyコマンド実行・`TOOL_CHECK` VERIFIED・Evidence生成）を別途実施する。受け入れ対象Listenerのhostingが機械的に `Service` と判定されることも必須とする（Principal Identity Evidenceの Hosting mode）。Interactive modeのPASSは、Service modeのAcceptanceを代替しない。
 
 ### Mode変更時
 
@@ -923,3 +930,4 @@ Identity / run binding:
 - 2026-09-23 v0.1 Draft, L2 Independent Review remediation Round 1（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: PR #13へのForced L2独立レビューで、Interactive mode採用の手順がdedicated-user security boundaryを保全も証明もしていない、という2件のBlockingを受けた。(1) CORE-RR-L2-001: §20はRunner専用userのcontextで動くことだけを要求し、Runner directoryのACLに要求が無かった。Windows既定NTFS権限では `NT AUTHORITY\Authenticated Users` に `Modify` が継承されるため、同一PC上の通常アカウントがrunner binary・script・`_work`・`_diag` を、専用runner userの権限で実行される前に差し替えられる（実機のPilot runner directoryで `Authenticated Users: Modify` を確認）。§20へ Runner Directory ACL Invariant を追加し、accessを SYSTEM / Administrators / 専用runner user に限定すること・継承無効化・runner userのwrite権限維持を必須条件とし、Interactive mode固有checkへ項目9（ACL検証PASS）を追加した。手順と検証コマンドは `harness/REMOTE_REVIEW_SETUP.md` §5.1。(2) CORE-RR-L2-002: §20はどのWindows principalがrunnerを実行したかをoperatorの申告で足りる形にしており、機械的なidentity checkもacceptance対象runとの結び付けも定義していなかった。§20へ Principal Identity Evidence を追加し、`Runner.Listener` processの実 ownerを確認すること（`whoami` では代替しない）、run ID・runner name・採用modeと結び付けて記録することを必須とし、Interactive mode固有check 1をprocess owner確認へ強化した。加えて Durable Acceptance Record 節を追加し、保存先を既存の §4 Durable History候補（Product repository側）とした（新しい記録層は新設していない）。§20 記録節へFAIL条件4件を明記。**Remote ReviewのEvidence schema（§10 Schema 1.1）・`metadata.json`・report jobの検証semantics（SEC-24〜SEC-27）・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Status（Draft v0.1 / Pilot）は変更していない**。Service modeの扱いも変更していない
 - 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: Round 2のwhole-PR再レビューで、Round 1の対応では両Findingが未解消と判定された。(1) CORE-RR-L2-001: Runner Directory ACL Invariantがrootの継承無効化と許可集合外identityの不在しか要求しておらず、必須principal・必須right・Deny・descendant・ownerを要求していなかったため、安全でない、または使えないtreeがACL CHECKをPASSしえた。Acceptance条件をtree全体のinvariant（許可principal3つだけ・必須FullControl・Deny無し・root protected・protected descendant無し・owner制限・reparse point無し・command成功・hardening直後とAT-02完了後の両方で検証）へ改訂し、`GITHUB_ActionsRunner_*` groupを許可principalから外した（Service modeでも同じ）。(2) CORE-RR-L2-002: Principal Identity Evidenceが、process ownerとrun ID・runner nameを手作業で対応付ければ足りる形であり、どのinstallationのprocessか・どのrunを実行したか・同じ稼働期間かを証明していなかった。target directory → Listener process（pathの一致がちょうど1つ）→ owner → local runner登録 → GitHub job（runner識別子）→ job環境の既存 `metadata.json` `run` → Durable Acceptance Recordの連鎖と、PID + 作成時刻によるtiming要求を必須とした。Durable Acceptance Recordの項目を拡張し、必須のbinding証跡の欠落をFAILとした。§20 記録節のFAIL条件を ACL / Identity・run binding / 記録 に分けて列挙した。Interactive mode固有check 1 / 9を上記に合わせた。手順・scriptは `harness/REMOTE_REVIEW_SETUP.md` §5.1 / §6.1が所有する。**Evidence schema（§10 Schema 1.1）・`metadata.json`・report jobの検証semantics（SEC-24〜SEC-27）・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Runner Mode（Interactive採用）・Status（Draft v0.1 / Pilot）は変更していない**
 - 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 3（pre-mutation reparse-point handling、Blocking、docs-only）: Round 3のwhole-PR再レビューで、hardeningがreparse pointの確認より前にrecursiveなACL / owner変更を実行していた点が新しいBlockingとされた（`icacls /reset /T` はtree内のdirectory junctionを辿りtree外を変更することを実機で確認）。§20 Runner Directory ACL Invariantへ、recursiveな変更の前にreparse pointを辿らない走査で確認すること（事後の検証で代替しない）と、rootの隔離・directory footholdの不在を確認することを追加し、記録節のACL FAIL条件へ事前確認の欠落・検出・走査失敗を追加した。手順は `harness/REMOTE_REVIEW_SETUP.md` §5.1が所有する。**Evidence schema（§10 Schema 1.1）・`metadata.json`・SEC-01〜SEC-27・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Runner Mode（Interactive採用）・Principal Identity Evidence・Status（Draft v0.1 / Pilot）は変更していない**
+- 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 4（CORE-RR-L2-003、Blocking、docs-only）: Final whole-PR L2再レビューで、§20がRunner Modeの記録とListener → installation → runのbindingを要求する一方、受け入れ対象Listenerが実際にどのmodeでhostされているかを機械的に要求していない点がBlockingとされた。記録値だけのmodeで、Service modeで動くListenerをInteractiveとして受け入れうる。§20 共通invariantへ、記録したRunner Modeがhostingからの機械的判定と一致することを追加した。Principal Identity Evidenceの連鎖とbulletへHosting modeを追加した。判定は親process chainを一次情報とし、service登録状態を矛盾検出に使う。Interactive modeは、既存の `harness/REMOTE_REVIEW_SETUP.md` §5 / §5.5に基づき、対象installationのservice登録が残っていないことも要求する。Durable Acceptance Recordのmode項目、Interactive mode固有check（10項目目）、Service mode固有checkを更新した。手順・scriptは `harness/REMOTE_REVIEW_SETUP.md` §6.1。**Evidence Schema 1.1・`metadata.json`・SEC-01〜SEC-27・AT-01〜AT-29・workflow・permissions・Runner Mode（Interactive採用）・Trust Model・Operator Gate・Status（Draft v0.1 / Pilot）は変更していない**
