@@ -767,8 +767,8 @@ Formal Runner Acceptanceの構成は次のとおりであり、特定のprocess 
 
 ### 共通invariant（Mode非依存）
 
-- **Runner directoryのACLが、SYSTEM / Administrators / 専用runner user の3 principalに限定されている**（下記 Runner Directory ACL Invariant）
-- **Runner processの実 process ownerが、専用Windowsユーザーであることが機械的に確認されている**（下記 Principal Identity Evidence。自己申告・サインイン観察では足りない）
+- **Runner directory tree全体のACLとownerが、SYSTEM / Administrators / 専用runner user の3 principalに限定され、必須rightが揃っている**（下記 Runner Directory ACL Invariant）
+- **target installationのRunner process・その実owner・local runner登録・受け入れ対象のGitHub Actions jobが、機械的な1本の連鎖として結び付いている**（下記 Principal Identity Evidence。自己申告・サインイン観察・process名だけの特定では足りない）
 - 採用したRunner Mode（Interactive / Service）が明示的に記録されている
 - Acceptanceを実施したRunner Modeが、実運用で使うRunner Modeと一致している
 - Codexが実際に起動できる（`codex --version` 相当）
@@ -780,29 +780,48 @@ Formal Runner Acceptanceの構成は次のとおりであり、特定のprocess 
 
 専用runner userが非Administratorであることは、それだけではRunner directoryを保護しない。Windowsの既定NTFS権限では `NT AUTHORITY\Authenticated Users` に `Modify` が継承されるため、**同一PC上の通常アカウントがrunner binary・script・`_work`・`_diag` を、専用runner userの権限で実行される前に差し替えられる**。
 
-Acceptanceの必須条件:
+Acceptanceの必須条件（2026-09-23 Round 2で改訂。runner directoryのrootと、hidden・system属性を含むすべてのdescendantに適用する）:
 
-- Runner directoryへのaccessが `NT AUTHORITY\SYSTEM` / `BUILTIN\Administrators` / 専用runner user の3つに限定されている（Service modeではrunnerが作る `GITHUB_ActionsRunner_*` groupを加えてよい）
-- 通常のauthenticated user・普段使いアカウントに write / modify / full control が残っていない
-- 継承が無効化されている（`AreAccessRulesProtected` が `True`）
-- 専用runner userは `_work` / `_diag` / runner-owned stateへ書ける（読み取り専用にしない）
+- ACEを持つのは `NT AUTHORITY\SYSTEM` / `BUILTIN\Administrators` / 専用runner user の3つだけである。readだけのACEも含め、通常のauthenticated user・普段使いアカウント・`GITHUB_ActionsRunner_*` group等、他のprincipalのACEが残っていない（Service modeでも同じ）
+- 3 principalが必須のAllow FullControlを持つ（rootはexplicit、descendantは継承）。専用runner userは `_work` / `_diag` / runner-owned stateへ書ける（読み取り専用にしない）
+- Deny ACEが無い
+- rootの継承が無効化されている。rootのpolicyを継承しないprotected descendantが無い
+- すべてのobjectのownerが上記3 principalのいずれかである
+- reparse pointが無い
+- hardeningのACL変更commandがすべて成功している（exit code 0）
+- 検証がtree全体を走査している。rootだけの検証、principal名の有無だけの検証ではPASSにしない
+- 検証をhardening直後とAT-02完了後の両方で行い、両方がPASSである
 
-手順と検証コマンドは `harness/REMOTE_REVIEW_SETUP.md` §5.1。検証が `ACL CHECK: PASS` にならない場合、**Runnerを本番投入しない**。
+Service modeの登録でrunnerが作る `GITHUB_ActionsRunner_*` groupは、許可principalに含めない。そのgroupが対象installationのものであることとmembershipの正当性を、runnerの内部実装に依存せず汎用に検証する方法を定義できないため、許可集合を狭める（runner userへ直接付与する）。
+
+手順・検証script・negative testは `harness/REMOTE_REVIEW_SETUP.md` §5.1。検証が `ACL CHECK: PASS` にならない場合、**Runnerを本番投入しない**。
 
 ### Principal Identity Evidence（2026-09-23追加、CORE-RR-L2-002）
 
 「専用ユーザーで動かしている」という申告や、サインインしているユーザーの観察だけでAcceptanceをPASSにしない。**runner processそのもののownerを確認する。**
 
-必須:
+必須（2026-09-23 Round 2で改訂）: 次の連鎖を、手作業の対応付けを挟まずに証明する。
 
-- `Runner.Listener` processの実 ownerを取得し、専用runner userと一致することを確認する（`whoami` はshellの実行者を示すだけで、これを代替しない）
-- 取得した証跡を、受け入れ対象のGitHub Actions **run ID**・**runner name**・**採用Runner Mode** と結び付けて記録する
-- 証跡の欠落、またはownerの不一致は **§20 FAIL** とする
-- identity evidenceを取得したrunner稼働期間と、run IDが指すrunの稼働期間が異なる場合、その証跡を当該Acceptanceに使わない
+```text
+target runner directory
+  → そのinstallationのListener process（ちょうど1つ）
+  → そのprocessの実owner
+  → 同じinstallationのlocal runner登録
+  → 受け入れ対象GitHub Actions run attemptのself-hosted job
+  → Durable Acceptance Record
+```
 
-取得手順は `harness/REMOTE_REVIEW_SETUP.md` §6.1。
+- Listenerをprocess名ではなく、target installationの実行fileのpathで特定する。一致が0件・複数件ならFAILとし、最初の1件を選ばない。他のListenerのpathを読めず曖昧さを解消できない場合もFAIL
+- processの実ownerが専用runner userと一致する（`whoami` はshellの実行者を示すだけで、これを代替しない）
+- runner登録のidentityを、同じinstallationのlocal登録情報から導出する。それが、GitHub側で受け入れ対象jobを実行したrunnerの識別子と一致する。runner nameは一意である保証が無いため、nameだけで一致とみなさない
+- job環境で記録された run ID / run attempt / runner name（既存Evidenceの `metadata.json` `run`）が、受け入れ対象runとlocal登録に一致する
+- 同じinstallationのlocal traceに、受け入れ対象runの記録がある
+- **Timing**: process identityをPID + 作成時刻で扱う。そのprocessがjob開始前に作成され、job完了後にも同じprocessとして存在していたこと（同じrunner稼働期間）を示す。PID単独の一致、別の稼働期間に取得した証跡、時刻の重なりを示せない証跡は使わない
+- 上記のいずれかを取得できない・曖昧・不一致の場合は **§20 FAIL** とする
 
-本要求は **Runner Acceptanceの記録**に対するものであり、Remote ReviewのEvidence schema（§10 Schema 1.1）・`metadata.json` の項目・report jobの検証semantics（SEC-24〜SEC-27）を変更しない。
+取得手順・script・時計のずれに対する余裕・判定規則は `harness/REMOTE_REVIEW_SETUP.md` §6.1。
+
+本要求は **Runner Acceptanceの記録**に対するものであり、Remote ReviewのEvidence schema（§10 Schema 1.1）・`metadata.json` の項目・report jobの検証semantics（SEC-24〜SEC-27）を変更しない。job環境側の証跡には、既存の `metadata.json` の `run` fieldを読むだけである。
 
 ### Durable Acceptance Record（2026-09-23追加）
 
@@ -815,14 +834,21 @@ Runner Acceptanceの結果は、AI sessionやSetup作業の手元だけに残さ
 
 | 項目 | 例 |
 |---|---|
-| どのrunner | runner name |
+| どのrunner directory | path |
 | どのmode | Interactive / Service |
-| どのWindows principal | process ownerの値 |
-| どのGitHub run | run ID |
-| ACL検証 | PASS / FAIL |
+| どのWindows principal | 専用runner user、Listenerのprocess owner |
+| ACL検証 | hardening直後・AT-02完了後それぞれのPASS / FAIL |
+| どのlocal runner登録 | local登録情報のrunner識別子・runner name |
+| どのprocess | Listenerの実行file path・PID・作成時刻 |
+| どのGitHub run | run ID / attempt、jobを実行したrunnerの識別子・name、jobの開始・完了時刻 |
+| job環境の証跡 | `metadata.json` の run ID / attempt / runner name |
+| local trace | 受け入れ対象runを記録したlocal log |
+| timing | 証跡の取得時刻、Timing判定 |
 | Codex / `TOOL_CHECK` / Evidence生成 | PASS / FAIL |
 | 実施日 | 日付 |
 | 総合判定 | PASS / FAIL |
+
+必須のbinding証跡（上表のdirectory・principal・ACL・local登録・process・GitHub run・job環境・local trace・timing）が1つでも欠けている記録は、**§20 FAIL** とする。
 
 password・token・SID値・個人のhome path・無関係な個人情報を記録しない（`harness/DEVELOPMENT_STANDARDS.md` §5 Evidence Integrity）。hostnameは必要なら一般名へ置換してよい。
 
@@ -830,7 +856,7 @@ password・token・SID値・個人のhome path・無関係な個人情報を記�
 
 Interactive modeで本番投入する場合、上記に加えて次を確認する。
 
-1. runner processの実 process ownerが専用runner userであることを、Principal Identity Evidence（上記、`harness/REMOTE_REVIEW_SETUP.md` §6.1）で確認している。`run.cmd` を起動したshellの `whoami` だけでこの項目をPASSにしない
+1. target installationのListener processの実ownerが専用runner userであり、そのprocessが受け入れ対象jobと結び付いていることを、Principal Identity Evidence（上記、`harness/REMOTE_REVIEW_SETUP.md` §6.1）で確認している。`run.cmd` を起動したshellの `whoami` だけでこの項目をPASSにしない
 2. `codex --version` 相当が成功する
 3. Codexがread-onlyコマンドを実行できる
 4. `TOOL_CHECK` がVERIFIEDになる
@@ -838,7 +864,7 @@ Interactive modeで本番投入する場合、上記に加えて次を確認す�
 6. Evidenceが生成される
 7. runner processを停止すると、GitHub上でrunnerがOffline / 利用不可になり、新しいRemote Review jobが開始されない
 8. service modeでの動作を主張しない（Service modeを実際に検証していない限り、Service mode側をPASSと記録しない）
-9. Runner directory ACL検証（`harness/REMOTE_REVIEW_SETUP.md` §5.1）が `Inheritance disabled: True` / `ACL CHECK: PASS` である
+9. Runner directory ACL検証（`harness/REMOTE_REVIEW_SETUP.md` §5.1、tree全体）が、hardening直後とAT-02完了後の両方で `ACL CHECK: PASS` である
 
 ### Service mode固有check
 
@@ -854,10 +880,30 @@ Interactive → Service、またはService → Interactiveへ変更する場合�
 
 次のいずれかに該当する場合、Acceptanceを **FAIL** とする（「未検証」として保留することはできても、PASSにはしない）。
 
-- Runner directory ACL検証が `ACL CHECK: PASS` でない、または実施されていない
-- Principal Identity Evidenceが無い、または process ownerが専用runner userと一致しない
-- identity evidenceが、受け入れ対象のGitHub Actions run（run ID・runner name・採用mode）と結び付いていない
-- 上記の証跡がDurable Acceptance Recordに残っていない
+ACL:
+
+- Runner directory ACL検証が `ACL CHECK: PASS` でない、または実施されていない（hardening直後・AT-02完了後のどちらか一方でも）
+- hardeningのACL変更commandが失敗した
+- 必須principal（SYSTEM / Administrators / 専用runner user）が欠けている、または必須rightが不足している
+- 許可外のprincipal（writeを持つ通常アカウント・`GITHUB_ActionsRunner_*` groupを含む）のACEがある
+- Deny ACEがある
+- protected descendant、許可外のowner、reparse pointがある
+- descendantのfile / directoryに許可外のexplicit ACEがある
+
+Identity / run binding:
+
+- target installationのListenerの一致が0件または複数件である、または他のListenerのpathを読めず特定できない
+- Listenerの実行file pathがtarget installationと一致しない
+- process ownerが専用runner userと一致しない、または取得できない
+- local runner登録が、受け入れ対象jobを実行したrunnerと一致しない
+- job環境側の証跡（`metadata.json` の `run`）が無い、または一致しない
+- run IDが一致しない、または証跡がrun IDに結び付いていない
+- job期間とprocessの存続期間の重なりを示せない
+- 以前のrunner稼働期間に取得した証跡である
+
+記録:
+
+- 上記の証跡がDurable Acceptance Recordに残っていない、または必須のbinding証跡が欠けている
 
 ## Change History
 
@@ -872,3 +918,4 @@ Interactive → Service、またはService → Interactiveへ変更する場合�
 - 2026-09-17 v0.1 Draft, Risk-based Independent Review整合（docs-only）: `harness/DEVELOPMENT_STANDARDS.md` §5がRisk-based Review Assurance Level（L0 / L1 / L2）へ再設計されたことに伴い、§2の既存Harness対応表へReview Assurance Level行を追加し、`PHASE_WORKFLOW` §4の節名変更を反映。あわせて、Remote Reviewが常にMandatory audit scope全体を監査すること、Review Assurance LevelがRemote Review側のscope規則を変更しないことを明記した。Remote Review自体のStatus（Draft v0.1 / Pilot）、Supported Trust Model、Explicit Non-Goals、Security Claim、Trigger / Verification / Codex / Evidence semantics、SEC・AT番号、Pilot実装のいずれにも変更はない
 - 2026-09-23 v0.1 Draft, Runner Mode採用（Human Decision、docs-only、Forced Level 2扱い）: Formal Runner Acceptance Gate（§20）が `Windows Serviceとして動作する` をmode固有の必須条件として要求しており、security invariant（Runner専用Windowsユーザーというsecurity principal）を特定のprocess hosting方式へ結合させていた。§6にRunner Mode（Interactive / Service）の定義を追加し、今回のPilotではInteractive mode（専用runner userでサインインし `run.cmd` を手動起動する）を採用するHuman Decisionを記録した。§20を「選択したRunner Mode + 共通security invariant + mode固有check」の構成へ再定義し、Interactive mode固有check 8項目とService mode固有check、Mode変更時の再検証要求を明記した。Interactive modeが「review job単位ではunattended」であること（`run.cmd` 起動後は個々のCodex実行に人間の操作を要さないこと）を用語として固定した。§15にAT-01〜AT-29がRunner Mode非依存である旨とRunner Mode Evidenceの所有が§20であることを追記（新規AT番号なし）。§16 Rejected Approachesへ「すべてのrunnerにWindows Serviceを必須とする」案の不採用理由を追加し、Residual Risksの `Windows service上のCodex sandbox` 行をmode中立な `Runner context上のCodex sandbox` へ置き換え、Interactive modeのrunner可用性（再起動・logoff後に自動復帰しない）行を追加した。**Service modeを削除・禁止せず、安全でないとも判断していない**。Trigger / Verification / Codex / Evidence semantics、workflow実装、permissions、Codex sandbox、Evidence format、prompt、allowlist、PR write boundary、Product adoption architecture、Status（Draft v0.1 / Pilot）に変更はない
 - 2026-09-23 v0.1 Draft, L2 Independent Review remediation Round 1（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: PR #13へのForced L2独立レビューで、Interactive mode採用の手順がdedicated-user security boundaryを保全も証明もしていない、という2件のBlockingを受けた。(1) CORE-RR-L2-001: §20はRunner専用userのcontextで動くことだけを要求し、Runner directoryのACLに要求が無かった。Windows既定NTFS権限では `NT AUTHORITY\Authenticated Users` に `Modify` が継承されるため、同一PC上の通常アカウントがrunner binary・script・`_work`・`_diag` を、専用runner userの権限で実行される前に差し替えられる（実機のPilot runner directoryで `Authenticated Users: Modify` を確認）。§20へ Runner Directory ACL Invariant を追加し、accessを SYSTEM / Administrators / 専用runner user に限定すること・継承無効化・runner userのwrite権限維持を必須条件とし、Interactive mode固有checkへ項目9（ACL検証PASS）を追加した。手順と検証コマンドは `harness/REMOTE_REVIEW_SETUP.md` §5.1。(2) CORE-RR-L2-002: §20はどのWindows principalがrunnerを実行したかをoperatorの申告で足りる形にしており、機械的なidentity checkもacceptance対象runとの結び付けも定義していなかった。§20へ Principal Identity Evidence を追加し、`Runner.Listener` processの実 ownerを確認すること（`whoami` では代替しない）、run ID・runner name・採用modeと結び付けて記録することを必須とし、Interactive mode固有check 1をprocess owner確認へ強化した。加えて Durable Acceptance Record 節を追加し、保存先を既存の §4 Durable History候補（Product repository側）とした（新しい記録層は新設していない）。§20 記録節へFAIL条件4件を明記。**Remote ReviewのEvidence schema（§10 Schema 1.1）・`metadata.json`・report jobの検証semantics（SEC-24〜SEC-27）・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Status（Draft v0.1 / Pilot）は変更していない**。Service modeの扱いも変更していない
+- 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: Round 2のwhole-PR再レビューで、Round 1の対応では両Findingが未解消と判定された。(1) CORE-RR-L2-001: Runner Directory ACL Invariantがrootの継承無効化と許可集合外identityの不在しか要求しておらず、必須principal・必須right・Deny・descendant・ownerを要求していなかったため、安全でない、または使えないtreeがACL CHECKをPASSしえた。Acceptance条件をtree全体のinvariant（許可principal3つだけ・必須FullControl・Deny無し・root protected・protected descendant無し・owner制限・reparse point無し・command成功・hardening直後とAT-02完了後の両方で検証）へ改訂し、`GITHUB_ActionsRunner_*` groupを許可principalから外した（Service modeでも同じ）。(2) CORE-RR-L2-002: Principal Identity Evidenceが、process ownerとrun ID・runner nameを手作業で対応付ければ足りる形であり、どのinstallationのprocessか・どのrunを実行したか・同じ稼働期間かを証明していなかった。target directory → Listener process（pathの一致がちょうど1つ）→ owner → local runner登録 → GitHub job（runner識別子）→ job環境の既存 `metadata.json` `run` → Durable Acceptance Recordの連鎖と、PID + 作成時刻によるtiming要求を必須とした。Durable Acceptance Recordの項目を拡張し、必須のbinding証跡の欠落をFAILとした。§20 記録節のFAIL条件を ACL / Identity・run binding / 記録 に分けて列挙した。Interactive mode固有check 1 / 9を上記に合わせた。手順・scriptは `harness/REMOTE_REVIEW_SETUP.md` §5.1 / §6.1が所有する。**Evidence schema（§10 Schema 1.1）・`metadata.json`・report jobの検証semantics（SEC-24〜SEC-27）・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Runner Mode（Interactive採用）・Status（Draft v0.1 / Pilot）は変更していない**
