@@ -146,7 +146,7 @@ runner directoryのrootと、その下のすべてのfile / directory（hidden�
 4. **root**: 継承が無効（protected）で、継承ACEを持たない
 5. **descendant**: protected（継承を切った）objectが無い。すべてrootのpolicyを継承する
 6. **owner**: すべてのobjectのownerが上記3 principalのいずれか（ownerはACEに関係なく自分のobjectのDACLを書き換えられるため）
-7. **reparse point無し**: junction / symbolic linkを置かない（検証が辿らない経路を作らない）
+7. **reparse point無し**: junction / symbolic link等のreparse pointを置かない。**recursiveなACL / owner変更を実行する前に**、root・ancestor・すべてのdescendantを、reparse pointを辿らずに走査して確認する（事後の検証で代替しない。下記「reparse pointとraceの扱い」）
 8. **ACL変更commandがすべて成功している**（exit code 0）
 
 principalは表示名ではなくSIDで判定する（localeの差と同名アカウントの取り違えを避ける）。
@@ -158,13 +158,30 @@ principalは表示名ではなくSIDで判定する（localeの差と同名ア�
 | `/inheritance:r` | **継承ACEだけ**を除去し、継承を無効化する。explicit ACEは残る | rootにだけ使う。単独では既存のexplicit ACE（例: runner groupのACE）を消せない |
 | `/grant` | 既存のexplicit grantに**追加**する | 使わない |
 | `/grant:r` | 指定principalの既存explicit grantを**置換**する（他principalのACEは残る） | rootの3 principalに使う |
-| `/reset` | ACLを既定の継承ACLへ置き換える（explicit ACEを捨て、保護を解除する） | `/T` を付けてtree全体を初期化する |
-| `/setowner` | ownerを変更する | `/T` を付けてownerを統一する |
-| `/T` | 指定directory配下のすべてのfile / directoryへ適用する | `/reset` / `/setowner` に付ける |
+| `/remove` / `/remove:d` | 指定principalのACE（`:d` はDenyだけ）を除去する | rootに残った許可外ACE・Denyの除去に使う |
+| `/reset` | ACLを既定の継承ACLへ置き換える（explicit ACEを捨て、保護を解除する） | 各objectに `/T` 無しで使う（foothold除去）。`/T` 付きはrootの子にだけ使う |
+| `/setowner` | ownerを変更する | 同上 |
+| `/T` | 指定directory配下のすべてのfile / directoryへ適用する。**directory junctionを辿り、その先（tree外）も変更する** | reparse pointが無いことを確認した後にだけ、rootの子へ使う |
+| `/L` | symbolic link自体を対象にする | junctionの走査は止めない（実機で確認）。本手順では頼らない |
 
-旧手順（`/inheritance:r` + `/grant`）は、rootに既に在るexplicit ACEと、descendantのexplicit ACE・保護を残す。下記negative testで、旧手順の後もそれらが残ることを確認した。
+実機での確認（2026-09-23、Windows 10 Pro、使い捨てdirectory。tree内の `_work\link` をtree外directoryへのjunctionにした）:
+
+| command | tree外のACLが変わったか |
+|---|---|
+| `icacls <root> /reset /T` / `/reset /T /L` / `/grant ... /T` | **変わった**（junctionを辿る） |
+| `icacls <root> /grant:r ... `（root単独）/ `/inheritance:r`（root単独）/ `Set-Acl`（root単独） | 変わらなかった |
+| `icacls <root> /setowner ... /T` / `takeown /R` | 判定不能（非elevatedでは自分自身にしかownerを設定できず、差が出ない）。**辿る前提で扱う** |
+
+symbolic linkは作成に `SeCreateSymbolicLinkPrivilege` が要り、検証環境（非elevated）では作れなかった。本手順の検出はreparse point属性で行うため、junction・symbolic link・その他のreparse pointを区別せずFAILにする。
+
+旧手順（`/inheritance:r` + `/grant`）は、rootに既に在るexplicit ACEと、descendantのexplicit ACE・保護を残す。Round 2の手順（最初に `/reset /T` と `/setowner /T` を実行する）は、tree内にjunctionがあるとtree外のACLを変更する（下記negative testの対照で確認）。
 
 #### 手順（管理者PowerShell、runner停止中）
+
+前提（operatorが確認する。scriptは機械的に確認しない）:
+
+- runnerを停止している（Interactive: `run.cmd` を停止、Service: serviceを停止）
+- Interactive modeでは `<runner-user>` をsign outしている（runner userのprocessが残っていない）
 
 次を `Harden-RunnerAcl.ps1` として、runner directoryの外の、Administratorだけが書ける場所へ保存し、`powershell -NoProfile -ExecutionPolicy Bypass -File Harden-RunnerAcl.ps1 -RunnerDir 'C:\actions-runner\<repository>' -RunnerUser '<runner-user>'` で実行する。
 
@@ -175,32 +192,133 @@ param(
     [string] $OwnerSid = 'S-1-5-32-544'   # BUILTIN\Administrators
 )
 $ErrorActionPreference = 'Stop'
+$SidType = [System.Security.Principal.SecurityIdentifier]
 
 function Invoke-Icacls {
     & icacls.exe @args
     if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE): icacls $($args -join ' ')" }
 }
+function Test-Reparse([string] $p) {
+    ([System.IO.File]::GetAttributes($p) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+}
+function Get-FileId([string] $p) {
+    $o = & fsutil.exe file queryfileid $p
+    if ($LASTEXITCODE -ne 0) { throw "fsutil failed (exit $LASTEXITCODE): $p" }
+    "$o"
+}
 
+# ---- Phase A: validate the root. No mutation. ----
 $RunnerDir = (Resolve-Path -LiteralPath $RunnerDir).ProviderPath
-$RunnerSid = (New-Object System.Security.Principal.NTAccount($env:COMPUTERNAME, $RunnerUser)).Translate(
-    [System.Security.Principal.SecurityIdentifier]).Value
+if (-not (Test-Path -LiteralPath $RunnerDir -PathType Container)) { throw "not a directory: $RunnerDir" }
+$p = $RunnerDir
+while ($p) {   # the root and every ancestor must not be a reparse point
+    if (Test-Reparse $p) { throw "PREFLIGHT: FAIL - reparse point on runner path: $p" }
+    $p = Split-Path -Parent $p
+}
+$RunnerSid = (New-Object System.Security.Principal.NTAccount($env:COMPUTERNAME, $RunnerUser)).Translate($SidType).Value
+$allowed = @('S-1-5-18', 'S-1-5-32-544', $RunnerSid)
+$rootId  = Get-FileId $RunnerDir
 
-# 1. Whole tree: drop explicit ACEs and protection; inherit from parent only
-Invoke-Icacls $RunnerDir /reset /T /Q
-# 2. Whole tree: normalize owner (an owner can always rewrite its object's DACL)
-Invoke-Icacls $RunnerDir /setowner "*$OwnerSid" /T /Q
-# 3. Root: set the 3 required explicit ACEs with replace semantics (/grant:r)
+# ---- Phase B: isolate the root only (no /T). Untrusted accounts lose access granted via the root. ----
+Invoke-Icacls $RunnerDir /setowner "*$OwnerSid"
 Invoke-Icacls $RunnerDir /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*${RunnerSid}:(OI)(CI)F"
-# 4. Root: disable inheritance and drop inherited ACEs (descendants inherit only the 3)
 Invoke-Icacls $RunnerDir /inheritance:r
+$acl = Get-Acl -LiteralPath $RunnerDir
+$extra = @($acl.GetAccessRules($true, $false, $SidType) | Where-Object { $allowed -notcontains $_.IdentityReference.Value } |
+    ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+foreach ($sid in $extra) { Invoke-Icacls $RunnerDir /remove "*$sid" }
+foreach ($sid in $allowed) { Invoke-Icacls $RunnerDir /remove:d "*$sid" }
+$acl   = Get-Acl -LiteralPath $RunnerDir
+$rules = @($acl.GetAccessRules($true, $true, $SidType))
+$bad   = @($rules | Where-Object { $allowed -notcontains $_.IdentityReference.Value -or $_.AccessControlType -ne 'Allow' -or $_.IsInherited })
+if (-not $acl.AreAccessRulesProtected -or $bad.Count -or $rules.Count -ne 3 -or $allowed -notcontains $acl.GetOwner($SidType).Value) {
+    throw 'root isolation did not produce the expected ACL'
+}
+if ((Test-Reparse $RunnerDir) -or (Get-FileId $RunnerDir) -ne $rootId) { throw 'runner root changed during isolation' }
+
+# ---- Phase C: non-following inventory. Recursive commands run only if it is clean. ----
+function Get-Inventory {
+    $r = [ordered]@{ Links = @(); Errors = @(); Footholds = @(); Children = @() }
+    $queue = New-Object System.Collections.Generic.Queue[string]
+    $queue.Enqueue($RunnerDir)
+    while ($queue.Count) {
+        $dir = $queue.Dequeue()
+        try { $entries = @(Get-ChildItem -LiteralPath $dir -Force) } catch { $r.Errors += "${dir}: enumeration failed"; continue }
+        foreach ($e in $entries) {
+            if ($dir -eq $RunnerDir) { $r.Children += $e.FullName }
+            if ($e.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { $r.Links += $e.FullName; continue }
+            if (-not $e.PSIsContainer) { continue }
+            try {
+                $a = Get-Acl -LiteralPath $e.FullName
+                $foreign = @($a.GetAccessRules($true, $true, $SidType) | Where-Object { $allowed -notcontains $_.IdentityReference.Value })
+                if ($foreign.Count -or $allowed -notcontains $a.GetOwner($SidType).Value) { $r.Footholds += $e.FullName }
+            } catch { $r.Errors += "$($e.FullName): ACL unreadable" }
+            $queue.Enqueue($e.FullName)
+        }
+    }
+    [pscustomobject]$r
+}
+function Assert-NoLinks($inv, [string] $stage) {
+    if ($inv.Links.Count -or $inv.Errors.Count) {
+        $inv.Links  | ForEach-Object { "  reparse point: $_" }
+        $inv.Errors | ForEach-Object { "  $_" }
+        throw "PREFLIGHT: FAIL ($stage) - no recursive ACL/owner command was run"
+    }
+}
+
+$inv = Get-Inventory
+Assert-NoLinks $inv 'inventory'
+# Close directory footholds top-down, one object at a time, without /T.
+foreach ($d in $inv.Footholds) {
+    if (Test-Reparse $d) { throw "PREFLIGHT: FAIL - became a reparse point: $d" }
+    Invoke-Icacls $d /setowner "*$OwnerSid"
+    Invoke-Icacls $d /reset
+    if (Test-Reparse $d) { throw "PREFLIGHT: FAIL - became a reparse point: $d" }
+}
+$inv = Get-Inventory
+Assert-NoLinks $inv 're-inventory'
+if ($inv.Footholds.Count) { $inv.Footholds | ForEach-Object { "  foothold: $_" }; throw 'PREFLIGHT: FAIL - directory footholds remain' }
+"PREFLIGHT: PASS"
+
+# ---- Phase D: recursive normalization of the root's children (the root stays isolated). ----
+foreach ($c in $inv.Children) {
+    Invoke-Icacls $c /reset /T /Q
+    Invoke-Icacls $c /setowner "*$OwnerSid" /T /Q
+}
 'HARDENING: DONE'
 ```
 
-- いずれかの `icacls` が0以外のexit codeを返すと、scriptは例外で止まり `HARDENING: DONE` を出さない。途中で止まったtreeは安全とみなさず、原因を解消して**最初からやり直す**。Denyやownerのせいで走査できない場合は、`takeown /F <runner-dir> /R /A /D Y`（これもexit codeが0であることを確認する）でAdministratorsへ所有権を移してからやり直す
-- `-RunnerUser` のアカウントが存在しない場合、SID解決の時点で例外になる（付与先を取り違えない）
-- 手順1〜4の間は、一時的にrootが親directoryのACLを継承する。この間に通常アカウントが作ったobjectはownerがそのアカウントになるため、下記検証のowner / principal判定でFAILする
+scriptの順序:
+
+| Phase | 内容 | 変更の範囲 |
+|---|---|---|
+| A | rootがdirectoryであること、rootと**すべてのancestor**がreparse pointでないことを確認し、rootのfile IDを記録する | 変更しない |
+| B | rootだけを隔離する（owner、3 principalの `/grant:r`、`/inheritance:r`、許可外ACE・Denyの除去）。結果のroot ACLが3 principalだけであることを確認し、rootがreparse pointになっていないこと・file IDが変わっていないことを再確認する | rootのみ（`/T` 無し）。Windowsの継承伝播でdescendantの継承ACEは再計算される |
+| C | reparse pointを辿らない幅優先の棚卸し。reparse point・列挙 / ACL読み取りの失敗が1つでもあれば `PREFLIGHT: FAIL` で停止する。許可外principalがownerである、または許可外principalのACEを持つdirectory（foothold）は、上から順に1つずつ `/T` 無しで閉じ、その前後でreparse pointでないことを確認する。最後にもう一度棚卸しし、reparse point・失敗・footholdが無ければ `PREFLIGHT: PASS` | footholdのdirectoryのみ（`/T` 無し） |
+| D | rootの各子に `/reset /T` と `/setowner /T` を実行する（rootには `/T` を使わないため、rootは隔離されたまま） | tree全体 |
+
+- いずれかの `icacls` / `fsutil` が0以外のexit codeを返す、または確認に失敗すると、scriptは例外で止まり `HARDENING: DONE` を出さない。`PREFLIGHT: FAIL` の場合、recursiveなACL / owner変更（Phase D）は実行されていない
+- 途中で止まったtreeは安全とみなさず、原因を解消して**最初からやり直す**。reparse pointが検出された場合は、それが何を指しているかを確認し、runner directory内から取り除いてからやり直す（取り除く前にtree外の対象を変更しない）
+- Administratorでも列挙できないdirectory（Deny・owner）で `PREFLIGHT: FAIL` になった場合は、そのdirectory**だけ**に `takeown /F <そのdirectory> /A`（`/R` を付けない。exit codeが0であることを確認する）を実行してからやり直す。`takeown /R` と `icacls ... /T` はreparse pointを辿りうるため、棚卸しがPASSする前に使わない
+- `-RunnerUser` のアカウントが存在しない場合、SID解決の時点（Phase Aの途中、変更前）で例外になる
 - runner userへ `F` を与えるのは、runnerが `_work` / `_diag` への書き込み、自己更新、runner-owned stateの更新を行うためである。ここを読み取り専用にするとrunnerが動かない
 - `.ps1` は **UTF-8 with BOM** で保存するか、commentをASCIIに限る。Windows PowerShell 5.1はBOM無しscriptをANSI codepageで読むため、日本語commentが直後の行を巻き込み、**commandが黙って実行されない**ことを実機で確認した（2026-09-23）
+
+#### reparse pointとraceの扱い
+
+`icacls ... /T` はjunctionを辿るため、「最後の検証でreparse pointをFAILにする」だけでは、FAILになる前にtree外が変更されうる。本手順は、recursiveな変更の**前**に次を成立させる。
+
+1. **rootを先に隔離する**（Phase B）。rootとancestorがreparse pointでないことをPhase Aで確認してから、rootだけを変更する。root単独の変更は、tree内のjunctionの先を変更しないことを実機で確認した
+2. 隔離後、通常アカウント（許可外principal）がtree内に新しいentryを作れるのは、自分がownerであるdirectory、または自分のACEが残っているdirectory（foothold）だけである。Phase Cはfootholdを `/T` 無しで閉じ、最後の棚卸しでfootholdが無いことを確認する。したがって、最後の棚卸しからPhase Dまでの間に、**通常アカウントがjunctionを置くことはできない**
+3. Phase Dはrootの子だけを対象にし、rootには `/T` を使わない（rootを継承状態へ戻してtreeを再び開かない）
+4. Phase Dの後の検証（下記 `Test-RunnerAcl.ps1`）は引き続き必須である。棚卸しは事後の検証を代替せず、事後の検証も棚卸しを代替しない
+
+完全にrace-freeとは主張しない。残る窓は次のとおりである（`harness/REMOTE_REVIEW_SECURITY.md` §5）。
+
+- **Administrator / SYSTEM**: 棚卸しとPhase Dの間にjunctionを置けば、Phase Dはそれを辿りうる。Administratorsを信頼する既存Trust Modelの範囲内の残差である
+- **runner user**: 許可principalであるため、runner userのprocessが動いていれば同じことができる。前提（runner停止・runner userのsign out）はoperatorが確認するもので、scriptは確認しない
+- **Phase A〜Bの間のroot差し替え**: 既定のACLでは通常アカウントがrootを削除・改名できるため、Phase AとPhase Bの間にrootをjunctionへ差し替えられた場合、root単独の変更がその先の1 objectに及びうる。Phase Bの後にreparse point属性とfile IDを再確認してFAILにするが、変更そのものは防げない
+- file（directoryでない）のownerやACEは、Phase Dまで残る。fileからは新しいentryを作れないため、junctionの設置には使えない。hard linkはreparse pointではないため、棚卸しでは検出しない
 
 #### 検証（acceptance条件。tree全体を走査する）
 
@@ -295,7 +413,24 @@ runner directoryと同じ構成（`bin`・`externals`・`_work`・`_diag`・hidd
 | 旧手順（`/inheritance:r` + `/grant`）の後に残ったstale explicit ACE | FAIL |
 | 非elevatedで `/setowner` を実行（icacls exit 1307） / 存在しないrunner user | scriptが例外で停止 |
 
-- hardening後にrunner user（の代理）が `_work` / `_diag` へ新しいfile・directoryを作っても、継承によりPASSのままであることを確認した
+reparse pointの事前確認（Phase A〜C）。検証環境ではsymbolic linkを作れないため、directory junction（`mklink /J`）を使った。tree外の対象にはexplicit ACE・protected subdirectory・sentinel fileを置き、owner + DACL（SDDL）と内容のhashを前後で比較した。tree内の1 fileには、`/reset /T` だけが消すexplicit ACE（canary）を置いた。
+
+| Case | 結果 |
+|---|---|
+| `_work` 内のjunction → tree外directory | `PREFLIGHT: FAIL`。tree外のowner / DACL / 内容は不変。canaryは残存（Phase D未実行） |
+| rootそのものがjunction | Phase Aで停止。junctionの先は不変 |
+| rootのancestorがjunction | Phase Aで停止。junctionの先は不変 |
+| 深い位置のjunction（`_work\a\b\deeplink`） | `PREFLIGHT: FAIL`。tree外は不変。canaryは残存 |
+| footholdのdirectory内のjunction | `PREFLIGHT: FAIL`。tree外は不変。footholdのexplicit ACEも残存（foothold除去より前に停止）。canaryは残存 |
+| 列挙できないsubdirectory | `PREFLIGHT: FAIL`（enumeration failed）。canaryは残存 |
+| operator自身の列挙を妨げるDeny | `PREFLIGHT: FAIL`。canaryは残存 |
+| reparse pointの無いtree | `PREFLIGHT: PASS` → `HARDENING: DONE` → `ACL CHECK: PASS` |
+| directory foothold（rootとdirectoryのexplicit ACE・protected directory） | foothold除去 → `PREFLIGHT: PASS` → `ACL CHECK: PASS` |
+| 対照: Round 2の手順を同じjunction fixtureへ実行 | **tree外のACLが変わった** |
+
+- 上の表（Round 2のnegative test）は、新しいhardening scriptで再実行し、すべて同じ結果になった。ただし「全mutationを混ぜたtreeを再hardening」のDenyは、対象をrunner userの代理（＝検証環境で実行するoperator自身）からSYSTEMへ変更した。operator自身の列挙を妨げるDenyは、新しい手順では `PREFLIGHT: FAIL` になるためである（上の表の「operator自身の列挙を妨げるDeny」）
+
+- hardening後にrunner user（の代理）が `_work` / `_diag` へ新しいfile・directoryを作っても、継承によりPASSのままであることを確認した（Round 2時点）
 - 検証環境は非elevatedであったため、`-OwnerSid` にはAdministratorsではなく実行ユーザー自身を与え、runner userの代理も実行ユーザー自身とした。Administratorsへの `/setowner` は、非elevatedで失敗しscriptが停止することだけを確認した（elevated環境での成功経路は本番Acceptance時に確認する）
 
 #### 記録するもの
@@ -304,7 +439,7 @@ Runner Acceptance記録（`harness/REMOTE_REVIEW.md` §20 Durable Acceptance Rec
 
 - runner directory path
 - 専用runner user名
-- `HARDENING: DONE` が出たこと
+- `PREFLIGHT: PASS` と `HARDENING: DONE` が出たこと（`PREFLIGHT: FAIL` の場合は検出したreparse pointのpathと、その後の対処）
 - 検証 (1)・(2) の `Items checked:` の件数と最終行（`ACL CHECK: PASS` / `FAIL`）。FAILの理由行を残す場合は、`S-1-5-21-` で始まるlocal account / groupのSIDを一般名へ置き換える
 
 password・local accountのSID値・token・無関係な個人pathは記録しない。group名・アカウント名は一般名で足りる。
@@ -682,3 +817,4 @@ Durable Acceptance Record（`harness/REMOTE_REVIEW.md` §20）へ、`listener.js
 - 2026-09-23 Runner Mode採用（Human Decision、docs-only、Forced Level 2扱い）: 登録手順がService modeを事実上強制していた（`run as service | Y`）ため、Interactive / Service両modeを記述する形へ変更した。§0へRunner Mode行（Interactive）を追加。§4の「Windows service（非対話セッション）でCodex sandboxが動くか未検証」という注記を、Interactive modeではsmoke testと同じ対話セッションで動くこと・未検証はService modeに限る旨へ整理。§5の登録表をmode別に分け、実際のrunner CLIの対話prompt（`Would you like to run the runner as service? (Y/N)`）と、非対話登録では `--runasservice` を付けたときだけService modeになることを、runner 2.337.0の `config.cmd --help` と実バイナリで確認した上で記載（オプションを創作していない）。§5.1〜§5.4として、Interactive modeの起動（`run.cmd`）・停止・再起動/logoff時に自動復帰しないこと・Mode変更手順（再登録とmode固有checkの再実施）を追加。§6のAcceptance手順へ、AT-01〜AT-29がRunner Mode非依存であることと、Interactive modeで記録すべきRunner Mode Evidenceを追加。§7 Troubleshootingと§8 停止・削除のservice前提の記述をmode別へ変更。**専用 `<runner-user>` 運用、Administrators非追加、Codex以外の認証情報を置かない要求は変更していない**
 - 2026-09-23 L2 Independent Review remediation Round 1（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: (1) 登録手順にRunner directoryのACL hardeningが無く、既定NTFS権限のままでは通常アカウントがrunner binary・`_work` を書き換えられた。§5.1 Runner directoryのACL hardening を新設し、`icacls /inheritance:r` + SYSTEM（`*S-1-5-18`）/ Administrators（`*S-1-5-32-544`）/ 専用runner user への `(OI)(CI)F` 付与と、`Get-Acl` による検証scriptを追加した。Service modeでrunnerが作る `GITHUB_ActionsRunner_*` groupがInteractive modeでは作られないため、継承ACEを外す際にrunner userへ明示付与しないとrunnerが `_work` / `_diag` へ書けなくなる点も明記した。コマンドは runner 2.337.0 / Windows 10 Pro 上で、hardening前後に対してFAIL / PASS双方が出ることを実機確認済み。(2) §6へ 6.1 Identity Evidence を新設し、`Get-CimInstance Win32_Process` + `Invoke-CimMethod GetOwner` による `Runner.Listener` の実 process owner確認（`whoami` では代替しない）と、run ID・runner name・採用mode・ACL検証結果を1つの記録として結び付ける Run binding 表を追加した。構文は実機の稼働processに対して `Domain\User` / `ReturnValue 0` を返すことを確認済み。**節番号の変更**: §5.1の新設に伴い、従来の §5.1 起動 / §5.2 停止 / §5.3 再起動・logoff / §5.4 Mode変更 を、それぞれ §5.2 / §5.3 / §5.4 / §5.5 へ繰り下げ、本文中の参照（§5 step 4、§7 Troubleshooting、§8 停止・削除）を更新した。2026-09-23の前エントリ本文にある「§5.1〜§5.4」の表記は当時の節番号であり、現在は§5.2〜§5.5を指す。**専用 `<runner-user>` 運用、Administrators非追加、Codex以外の認証情報を置かない要求、Runner Mode（Interactive採用）、AT-01〜AT-29は変更していない**
 - 2026-09-23 L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: Round 2のwhole-PR再レビューで、両Findingが未解消と判定された。(1) CORE-RR-L2-001: 旧§5.1の検証はrootだけを見て、許可集合外のidentityが無いことしか判定しておらず、必須principalの存在・Allow / Deny・必須right・descendant・ownerを確認していなかった。旧手順の `/inheritance:r` は継承ACEしか消さず、`/grant` は追加であるため、rootの既存explicit ACE（Pilot runnerではrunner groupのexplicit FullControl ACE）とdescendantのexplicit ACE・保護が残った。§5.1を、tree全体のinvariant（許可principal3つだけ・必須FullControl・Deny無し・root protected・protected descendant無し・owner制限・reparse point無し・全commandのexit code確認）、`icacls` semanticsの表、`/reset /T` → `/setowner /T` → `/grant:r` → `/inheritance:r` のhardening script、tree全体を走査する検証scriptへ置き換えた。`GITHUB_ActionsRunner_*` groupは許可principalから外した（membershipの汎用検証を定義できないため）。使い捨てdirectoryでPASS 3件・FAIL 13件・例外停止2件のtestを実施した。本番runner directoryのACLは変更していない。(2) CORE-RR-L2-002: 旧§6.1はprocess名だけでListenerを選び、PIDとownerを手作業でrun IDとrunner nameへ対応付けていた。§6.1を Runner Identity and Run Binding へ置き換え、target installationの `bin\Runner.Listener.exe` と一致するprocessがちょうど1つであること、owner SID、作成時刻、同じdirectoryの `.runner`（`agentId` / `agentName`）、jobs APIの `runner_id` / `runner_name` / `started_at` / `completed_at`、既存 `metadata.json` の `run.id` / `run.attempt` / `run.runner_name`、同じinstallationの `_diag` のWorker logの `run_id` を結び付けるscriptと、PID + 作成時刻によるTiming rule（60秒の余裕）を定義した。§6の番号付き手順へ §6.2 の見出しを付けた。§5.5へ、Mode変更時に§5.1をやり直すことを追加した。**Evidence Schema・workflow・script実装・permissions・AT-01〜AT-29・Runner Mode（Interactive採用）・専用 `<runner-user>` 運用は変更していない**
+- 2026-09-23 L2 Independent Re-review remediation Round 3（pre-mutation reparse-point handling、Blocking、docs-only）: Round 3のwhole-PR再レビューで、hardeningが `icacls /reset /T` と `/setowner /T` を、reparse pointの無いことを確認する前に実行していた点が新しいBlockingとされた。実機で、`icacls /reset /T`・`/reset /T /L`・`/grant /T` がtree内のdirectory junctionを辿ってtree外のACLを変更すること、root単独の `/grant:r`・`/inheritance:r` は変更しないことを確認した。§5.1のhardening scriptを、Phase A（rootとancestorのreparse point確認、変更なし）→ Phase B（root単独の隔離とfile IDの再確認）→ Phase C（reparse pointを辿らない棚卸し。reparse point・読み取り失敗で停止。許可外principalのdirectory footholdを `/T` 無しで閉じ、再度棚卸し）→ Phase D（rootの子にだけ `/reset /T`・`/setowner /T`）へ置き換えた。`icacls` semanticsの表へ `/remove`・`/L`・junctionの実測結果を追加し、「reparse pointとraceの扱い」を新設した（Administrator / runner user / root差し替え / fileの残差を明記）。`takeown` の復旧手順から `/R` を外した。negative testへ、tree外junction・root junction・ancestor junction・深いjunction・foothold内junction・列挙失敗・Deny・clean PASS・foothold除去PASSと、Round 2手順がtree外を変更する対照を追加した。Round 2のnegative testは新scriptで再実行し同じ結果（「全mutationを混ぜたtree」のDeny対象だけ変更、理由を明記）。**Evidence Schema・workflow・script実装・permissions・AT-01〜AT-29・Runner Mode（Interactive採用）・専用 `<runner-user>` 運用・§6.1のrunner / run bindingは変更していない**
