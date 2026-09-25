@@ -1,8 +1,34 @@
 # OTOMO Remote Review
 
-- Status: **Draft v0.1 / Pilot** — Pilot Product: OTOMO LAB (`t0t005081114-hue/otomo-lab`)
+- Status: **Suspended / Non-default Pilot**（2026-09-25 Human Decision。下記 Suspension）。Suspension時点の版: Draft v0.1 / Pilot — Pilot Product: OTOMO LAB (`t0t005081114-hue/otomo-lab`)
 - Approval: Independent Review・Human承認前。承認まではOTOMO共通Ruleとして確定しない（`harness/DEVELOPMENT_STANDARDS.md` §8 No Silent Harness Mutation）
 - Related: `harness/REMOTE_REVIEW_SECURITY.md` / `harness/REMOTE_REVIEW_SETUP.md` / `harness/templates/codex-independent-review.md`
+
+## Suspension（2026-09-25 Human Decision）
+
+Remote Review Pilotを標準運用から停止した。
+
+- PR comment `/review` を標準review routeとして使わない。OTOMOのIndependent Reviewの標準経路はNative Codex Reviewである（`harness/CODEX_REVIEW.md` §2.1）。Review Assurance Levelと各Levelの要求は変わらない（`harness/DEVELOPMENT_STANDARDS.md` §5）
+- 本書の本文（§1以降）は、過去のPilotの設計・Acceptance・Failure investigation用のReferenceとして保持する。本文中の現在形の記述は、Suspension前のPilot運用を記述したものである。新規のProduct Adoption（§17）・Runner Acceptance（§20）・Runner再構築を標準運用として行わない
+- Suspension前に取得したRemote ReviewのPASS・Formal Runner Acceptance等のEvidenceは、取得時点のEvidenceとして引き続き有効である。Suspensionはそれらを遡及して無効化しない
+- 再開には、Human Decisionと、再開時点で下記の阻害要因が解消していることの再検証が必要である。再開後のFormal Promotionには引き続き §19 が適用される
+- これはRemote Reviewの設計の否定ではない。Remote Review infrastructureを維持・修復するコストが、現時点のProduct開発価値を上回るというHuman判断による停止であり、将来必要になった場合に再評価する
+
+### Suspension Record
+
+| 項目 | 内容 |
+|---|---|
+| Date | 2026-09-25 |
+| 対象 | OTOMO LAB PR #5、target SHA `63a85d8e1c0a7d73e71a9bfbccab0e6e84755382` |
+| Remote Review run | `36106655707` |
+| Result（PR comment） | VERDICT: INCOMPLETE — Verification: PASS · Codex: FAILED · Infrastructure: FAILED。Codex failure: `Codex review timed out` |
+| 同じheadの後続run | `36113034116`: VERDICT: INCOMPLETE — Verification: PASS · Codex: FAILED · Infrastructure: FAILED。Codex failure: read-only commandを実行できない（sandbox helperの初期化失敗） |
+| 観測された阻害要因（Human報告） | Codex Windows read-only sandboxの `codex-windows-sandbox-setup.exe` が、Runner専用userのsessionでUAC昇格要求を出し続けた。setup後・再ログイン後も再発した |
+| 判定 | 「sandbox setupは初回のみ」という運用前提が成立せず、Interactive modeのunattended execution要求（§6、§20 Interactive mode固有check 5）を安定して満たせない |
+| Product codeへの判定 | Product code defectとは認定されていない（Deterministic VerificationはPASS。Codexのfindingはreview成立条件の未充足であり、実装不具合の認定ではない） |
+| Decision | Pilotを停止（Suspended / Non-default）。Independent Reviewの標準経路をNative Codex Reviewへ変更 |
+
+run・verdict・failure文言はOTOMO LAB PR #5のRemote Review commentで確認できる。UACの発生状況はHumanの報告であり、GitHub上のEvidenceには含まれない。username・password・SID等は記録しない（`harness/DEVELOPMENT_STANDARDS.md` §5 Evidence Integrity）。
 
 ## 1. Purpose
 
@@ -931,3 +957,4 @@ Identity / run binding:
 - 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: Round 2のwhole-PR再レビューで、Round 1の対応では両Findingが未解消と判定された。(1) CORE-RR-L2-001: Runner Directory ACL Invariantがrootの継承無効化と許可集合外identityの不在しか要求しておらず、必須principal・必須right・Deny・descendant・ownerを要求していなかったため、安全でない、または使えないtreeがACL CHECKをPASSしえた。Acceptance条件をtree全体のinvariant（許可principal3つだけ・必須FullControl・Deny無し・root protected・protected descendant無し・owner制限・reparse point無し・command成功・hardening直後とAT-02完了後の両方で検証）へ改訂し、`GITHUB_ActionsRunner_*` groupを許可principalから外した（Service modeでも同じ）。(2) CORE-RR-L2-002: Principal Identity Evidenceが、process ownerとrun ID・runner nameを手作業で対応付ければ足りる形であり、どのinstallationのprocessか・どのrunを実行したか・同じ稼働期間かを証明していなかった。target directory → Listener process（pathの一致がちょうど1つ）→ owner → local runner登録 → GitHub job（runner識別子）→ job環境の既存 `metadata.json` `run` → Durable Acceptance Recordの連鎖と、PID + 作成時刻によるtiming要求を必須とした。Durable Acceptance Recordの項目を拡張し、必須のbinding証跡の欠落をFAILとした。§20 記録節のFAIL条件を ACL / Identity・run binding / 記録 に分けて列挙した。Interactive mode固有check 1 / 9を上記に合わせた。手順・scriptは `harness/REMOTE_REVIEW_SETUP.md` §5.1 / §6.1が所有する。**Evidence schema（§10 Schema 1.1）・`metadata.json`・report jobの検証semantics（SEC-24〜SEC-27）・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Runner Mode（Interactive採用）・Status（Draft v0.1 / Pilot）は変更していない**
 - 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 3（pre-mutation reparse-point handling、Blocking、docs-only）: Round 3のwhole-PR再レビューで、hardeningがreparse pointの確認より前にrecursiveなACL / owner変更を実行していた点が新しいBlockingとされた（`icacls /reset /T` はtree内のdirectory junctionを辿りtree外を変更することを実機で確認）。§20 Runner Directory ACL Invariantへ、recursiveな変更の前にreparse pointを辿らない走査で確認すること（事後の検証で代替しない）と、rootの隔離・directory footholdの不在を確認することを追加し、記録節のACL FAIL条件へ事前確認の欠落・検出・走査失敗を追加した。手順は `harness/REMOTE_REVIEW_SETUP.md` §5.1が所有する。**Evidence schema（§10 Schema 1.1）・`metadata.json`・SEC-01〜SEC-27・AT-01〜AT-29・workflow実装・permissions・Trust Model・Operator Gate・Runner Mode（Interactive採用）・Principal Identity Evidence・Status（Draft v0.1 / Pilot）は変更していない**
 - 2026-09-23 v0.1 Draft, L2 Independent Re-review remediation Round 4（CORE-RR-L2-003、Blocking、docs-only）: Final whole-PR L2再レビューで、§20がRunner Modeの記録とListener → installation → runのbindingを要求する一方、受け入れ対象Listenerが実際にどのmodeでhostされているかを機械的に要求していない点がBlockingとされた。記録値だけのmodeで、Service modeで動くListenerをInteractiveとして受け入れうる。§20 共通invariantへ、記録したRunner Modeがhostingからの機械的判定と一致することを追加した。Principal Identity Evidenceの連鎖とbulletへHosting modeを追加した。判定は親process chainを一次情報とし、service登録状態を矛盾検出に使う。Interactive modeは、既存の `harness/REMOTE_REVIEW_SETUP.md` §5 / §5.5に基づき、対象installationのservice登録が残っていないことも要求する。Durable Acceptance Recordのmode項目、Interactive mode固有check（10項目目）、Service mode固有checkを更新した。手順・scriptは `harness/REMOTE_REVIEW_SETUP.md` §6.1。**Evidence Schema 1.1・`metadata.json`・SEC-01〜SEC-27・AT-01〜AT-29・workflow・permissions・Runner Mode（Interactive採用）・Trust Model・Operator Gate・Status（Draft v0.1 / Pilot）は変更していない**
+- 2026-09-25 Suspended / Non-default Pilot（Human Decision、docs-only、Forced Level 2扱い）: OTOMO LAB PR #5のRemote Review（run `36106655707`）がVerification PASS・Codex FAILED（`Codex review timed out`）・Infrastructure FAILEDでINCOMPLETEとなり、Codex Windows read-only sandboxのsetupがRunner専用userでUAC昇格要求を再発させ、unattended executionを安定して満たせなかったため、HumanがPilotの停止を決定した。StatusをSuspended / Non-default Pilotへ変更し、冒頭へSuspension節（`/review` を標準routeとしないこと、本文はReferenceとして保持すること、過去Evidenceを遡及無効化しないこと、再開にはHuman Decisionと阻害要因の再検証が必要なこと）とSuspension Recordを追加した。標準経路は `harness/CODEX_REVIEW.md` §2.1 のNative Codex Review。**§1以降の本文、Trust Model、Operator Gate、Explicit Non-Goals、SEC-01〜SEC-27、AT-01〜AT-29、Evidence Schema 1.1、Runner Acceptance（§20）とその既存Acceptance Record、Product側の実装・workflowは変更していない**

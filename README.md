@@ -48,11 +48,11 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 
 - `harness/DEVELOPMENT_STANDARDS.md`: 全Product共通の開発標準
 - `harness/PHASE_WORKFLOW.md`: Phase単位の実装・検証・レビュー・完了手順
-- `harness/REMOTE_REVIEW.md`: PRコメント `/review` からSelf-hosted RunnerでDeterministic VerificationとCodex Independent Reviewを行うRemote Reviewの仕様（Draft / Pilot: OTOMO LAB）
-- `harness/REMOTE_REVIEW_SECURITY.md`: Remote ReviewのSecurity Policy（Draft / Human承認前）
-- `harness/REMOTE_REVIEW_SETUP.md`: Self-hosted Runner登録など、人間が行うRemote Review Setup手順
-- `harness/templates/codex-independent-review.md`: Codex Independent Reviewの固定Prompt（version管理）
-- `harness/CODEX_REVIEW.md`: native Codex review（`/review` / `/codex:review`）を `AGENTS.md` 経由でrepository Source of TruthとCORE Harnessへ接続するReview Entry Point
+- `harness/CODEX_REVIEW.md`: native Codex review（`/review` / `/codex:review`）を `AGENTS.md` 経由でrepository Source of TruthとCORE Harnessへ接続するReview Entry Point。**Native Codex ReviewがIndependent Reviewの標準entrypoint**（2026-09-25 Human Decision）
+- `harness/REMOTE_REVIEW.md`: PRコメント `/review` によるRemote Reviewの仕様（**Suspended Pilot / historical reference**。2026-09-25 Human Decision）
+- `harness/REMOTE_REVIEW_SECURITY.md`: Remote ReviewのSecurity Policy（**Suspended Pilot / historical reference**）
+- `harness/REMOTE_REVIEW_SETUP.md`: Remote ReviewのSelf-hosted Runner Setup手順（**Suspended Pilot / historical reference**）
+- `harness/templates/codex-independent-review.md`: Remote Review用Codex Independent Reviewの固定Prompt（version管理。Remote ReviewとともにSuspended）
 - `harness/templates/agents-review-entrypoint.md`: Product / Lead repository向けの最小 `AGENTS.md` template
 - `AGENTS.md`: 本repository（OTOMO CORE）自身のCodex Review Entry Point
 

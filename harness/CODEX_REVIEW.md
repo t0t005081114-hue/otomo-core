@@ -26,12 +26,28 @@ Review Entry Pointに置くのは「何を読むか」「どの境界を守る�
 | 実行環境 | 起動した人・Agentのlocal checkout | Self-hosted Runner上のclean checkout |
 | Reviewerへの指示 | そのreviewのeffective instruction chain（§3）。Review Entry Pointはroot `AGENTS.md` | 固定Prompt `harness/templates/codex-independent-review.md` |
 | 正本 | 本ファイル + 参照先の既存Harness | `harness/REMOTE_REVIEW.md` |
+| 運用状態 | **標準のIndependent Review entrypoint** | **Suspended / Non-default Pilot**（2026-09-25 Human Decision） |
 
 - 両者は別の実行経路であり、どちらも他方を置換しない
+- Remote ReviewはSuspended / Non-defaultであり、`/review`（PR comment）を標準review routeとして使わない。停止理由・再開条件・過去Evidenceの扱いは `harness/REMOTE_REVIEW.md` Statusが所有する
 - Remote Review実行時は固定Promptがrepository instruction fileより優先する（同template §2）。本ファイルはこれを変更しない
 - 固定Prompt `harness/templates/codex-independent-review.md` はRemote Review専用である。native reviewではinstructionとして採用しない。変更対象の場合だけ、material under reviewとして監査する
 - native reviewの結果がどのLevelのEvidence要求を満たすかは `harness/DEVELOPMENT_STANDARDS.md` §5 に従って判断する。native reviewは通常、実装担当のlocal checkoutで動くため、それだけでClean-room Verificationを満たしたとみなさない
 - native reviewのPASSはPhase完了を意味しない（`harness/PHASE_WORKFLOW.md` §6）
+
+### 2.1 Standard Route（2026-09-25 Human Decision）
+
+OTOMOのIndependent Reviewの標準経路はNative Codex Reviewである。Review Assurance Level、各Levelの要求、Clean-room Verification、Verification Evidence、Durable History、reviewerの権限は `harness/DEVELOPMENT_STANDARDS.md` §5 が正本であり、本節は経路の対応だけを示す。
+
+| Level | 標準経路 |
+|---|---|
+| L0 | Independent Review Exemption（同 §5 Level 0）。native reviewを要求しない |
+| L1 | Native Codex ReviewによるTargeted Review（同 §5 Level 1）。Clean-roomは同 §5 のescalation条件に該当する場合に行う |
+| L2 | Clean-room Verification + Native Codex ReviewによるFull Review（同 §5 Level 2 / Clean-room Verification / Verification Evidence） |
+
+- 起動手段は Codex CLI（`codex review` 等）またはClaude Code plugin `/codex:review` を使える
+- review依頼側は、review対象のbase / head（またはreview対象のcommit SHA）を明示し、review結果のDurable Historyに記録する。mutable refだけを記録しない
+- Reviewerはrepository fileを変更せず、commit / push / mergeしない（§4）
 
 ## 3. Instruction Source と Precedence
 
@@ -116,7 +132,7 @@ Productが既存の `AGENTS.md` でReview Evidenceの記録について個別の
 
 ### 6.1 Instruction Sourceを変更するchange
 
-native reviewは、review対象checkout（head）のinstruction sourceを読み込む。そのため、repository-local instruction source（§3.1）を追加・変更・削除するchangeは、変更後の自分自身のinstructionでreviewされうる。Remote Reviewはreview ruleをbase commitから読むことでこれを避けている（`harness/templates/codex-independent-review.md` §2）。native reviewには、これに相当する技術的な強制手段が無い。
+native reviewは、review対象checkout（head）のinstruction sourceを読み込む。そのため、repository-local instruction source（§3.1）を追加・変更・削除するchangeは、変更後の自分自身のinstructionでreviewされうる。Remote Review（Suspended Pilot）はreview ruleをbase commitから読む設計でこれを避けていた（`harness/templates/codex-independent-review.md` §2）。native reviewには、これに相当する技術的な強制手段が無い。
 
 このchangeには次を適用する（2026-09-22 Human Decision）。
 
@@ -125,11 +141,9 @@ native reviewは、review対象checkout（head）のinstruction sourceを読み�
   - trusted baselineとしたbase側のeffective instruction chain
   - material under reviewとして確認したhead側のinstruction file
   - native reviewの自己参照Residual Risk（下記）
-  - Remote Reviewを実施したか。実施しなかった場合はその理由
 - **自己参照Residual Risk**: native reviewはhead側のinstruction fileを実際に読み込むため、base側をtrusted baselineとして扱っても、変更後の指示がreviewへ影響する可能性を完全には排除できない。native reviewだけで完全なtrust separationはできないものとして、この限界をResidual Riskとして明示する
-- そのrepositoryでRemote Reviewがすでに利用可能なら、Remote Reviewを優先して使う。Remote Reviewは唯一の必須手段ではない
-- Remote Reviewを導入していないrepositoryでは、Remote Reviewの導入をそのPRの前提にしない。未実施の理由をResidual Riskとして記録する
-- Remote Reviewを実施しない場合も、trusted-baselineでのreview、Residual RiskのDurable History、Humanの明示承認がそろえばmergeできる
+- このchangeでも、標準経路はtrusted-baselineでのnative review（§2.1）である。Remote ReviewはSuspended / Non-defaultであり（§2）、Remote Reviewを実施しないこと自体を別のResidual Riskとして記録する必要はない（2026-09-25 Human Decision。Remote Reviewの利用可否に応じて経路と記録を変えていた旧Ruleを置き換えた）
+- trusted-baselineでのreview、上記のDurable History（自己参照Residual Riskを含む）、Humanの明示承認がそろえばmergeできる
 - Remote Reviewのharness-sensitive file一覧や、base側から読むruleがinstruction sourceをすべて網羅するかは、Product側のRemote Review構成（`harness/REMOTE_REVIEW.md` §3 Ownership）の範囲であり、本ファイルでは変更しない
 - reviewer・実装担当はmergeしない。mergeはHumanの明示承認後にのみ行う
 
