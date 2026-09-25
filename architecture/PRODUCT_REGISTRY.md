@@ -34,7 +34,7 @@ Repositoryの存在とOTOMO CORE Adoptionは別に管理する。Repositoryが�
   - Product-specific business / brand / UI / KPI / MVP scope remains owned by `otomo-lab`
   - Product-specific validation commands are owned by `otomo-lab`
   - Legacy local `sns-growth-os` is not the same Git repository as official `otomo-lab` and is outside automatic migration
-  - Remote Review pilot is implemented in Product (`.github/workflows/remote-review.yml` + `scripts/remote-review/`); OTOMO CORE側仕様は引き続き Draft / Pilot
+  - Remote Review pilot is implemented in Product (`.github/workflows/remote-review.yml` + `scripts/remote-review/`); OTOMO CORE側仕様は2026-09-25 Human DecisionによりSuspended / Non-default Pilot（`harness/REMOTE_REVIEW.md` Suspension）。Product側の実装は削除していない
 
 ### OTOMO塾
 

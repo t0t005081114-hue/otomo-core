@@ -301,7 +301,11 @@ L2ではReview Scopeの縮小を認めない。これはL2に分類されたlogi
 
 #### 実行手段
 
-L2を満たす実行手段を1つに固定しない。`harness/REMOTE_REVIEW.md` のRemote Reviewは、clean checkout → Deterministic Verification → Codex Independent Review → Evidenceを一経路で満たす有力な手段だが、L2で必須の唯一の方法ではない。同等の独立性・再現性・Evidenceを満たす他の手段でもよい。
+L2を満たす実行手段を1つに固定しない。同等の独立性・再現性・Evidenceを満たす手段であればよい。
+
+現在の標準実行例は、Clean-room Verification（本節）とNative Codex Review（`harness/CODEX_REVIEW.md`）によるFull Independent Reviewの組み合わせである。native reviewだけではClean-room Verificationを満たさない（同 §2）。
+
+`harness/REMOTE_REVIEW.md` のRemote Reviewは、2026-09-25 Human DecisionによりSuspended / Non-defaultのPilotであり、現在の標準経路として推奨しない。Suspension前にRemote Reviewで取得したEvidenceは、Suspensionを理由に無効化しない。
 
 ### Finding
 

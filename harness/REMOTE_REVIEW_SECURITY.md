@@ -1,7 +1,9 @@
 # OTOMO Remote Review Security Policy
 
-- Status: **Draft v0.1** — Security policyはHuman承認が必要（`learning/KNOWLEDGE_PROMOTION.md` §8）。承認までは Pilot（OTOMO LAB）限定の運用基準とする
+- Status: **Suspended Pilot**（2026-09-25 Human Decision。`harness/REMOTE_REVIEW.md` Suspension）。Suspension時点の版: Draft v0.1 — Security policyはHuman承認が必要（`learning/KNOWLEDGE_PROMOTION.md` §8）。承認までは Pilot（OTOMO LAB）限定の運用基準とする
 - Related: `harness/REMOTE_REVIEW.md` / `harness/REMOTE_REVIEW_SETUP.md`
+
+Remote Review PilotはSuspended / Non-defaultである。本Policyのsecurity controlsは、過去PilotのReferenceとして保持する。本文中の運用記述はSuspension前のPilot運用を記述したものである。Suspended中にRunnerを起動する・`/review` を実行する場合（例: 再開判断のための再検証）も、本Policyのcontrolsはそのまま適用され、弱めない。
 
 ## 1. 前提
 
@@ -170,3 +172,4 @@ Runner processの停止は、採用しているRunner Mode（`harness/REMOTE_REV
 - 2026-09-23 L2 Independent Re-review remediation Round 2（CORE-RR-L2-001 / CORE-RR-L2-002、Blocking、docs-only）: §3の最低限リストとRunner Directory Integrityを、Runner directoryのroot・すべてのdescendantのACEとownerを SYSTEM / Administrators / 専用runner user に限定する、tree全体の要求へ改訂した。Service modeでrunnerが作る `GITHUB_ActionsRunner_*` groupを許可principalから外した（groupとmembershipの正当性を汎用に検証できないため。許可集合を狭める変更であり、弱めてはいない）。§5 Residual Risksへ、runner binding evidenceがAdministratorsを信頼するTrust Model・runner 2.337.0 のWorker log形式・時刻同期に依存することを追加した。**SEC-01〜SEC-27、Trust Model、Mandatory Controls、Operator Gate、Explicit Non-Goals、専用ユーザー分離の既存要求、Status（Draft v0.1）は変更していない。弱めた項目は無い**
 - 2026-09-23 L2 Independent Re-review remediation Round 3（pre-mutation reparse-point handling、Blocking、docs-only）: §5 Residual Risksへ、Runner directory hardening中のrace（Administrator / SYSTEM・動作中のrunner user・root隔離前のroot差し替え）を追加した。手順は `harness/REMOTE_REVIEW_SETUP.md` §5.1。**SEC-01〜SEC-27、Trust Model、Mandatory Controls、Operator Gate、Explicit Non-Goals、専用ユーザー分離の既存要求、Status（Draft v0.1）は変更していない。弱めた項目は無い**
 - 2026-09-23 L2 Independent Re-review remediation Round 4（CORE-RR-L2-003、Blocking、docs-only）: Runner Modeを受け入れ対象Listenerのhostingから機械的に判定する要求（`harness/REMOTE_REVIEW.md` §20、手順は `harness/REMOTE_REVIEW_SETUP.md` §6.1）の追加に合わせて、§5 Residual Risksへ「Runner Mode判定の前提」を追加した（一時点の判定、parent process spoofingはrunner user / Administrator / SYSTEMに限られること、Service modeの判定連鎖が実service runnerでは未実行であること）。**SEC-01〜SEC-27、Trust Model、Mandatory Controls、Operator Gate、Explicit Non-Goals、専用ユーザー分離の既存要求、Status（Draft v0.1）は変更していない。弱めた項目は無い**
+- 2026-09-25 Suspended Pilot（Human Decision、docs-only、Forced Level 2扱い）: Remote Review PilotのSuspension（`harness/REMOTE_REVIEW.md` Suspension）に合わせてStatusを更新し、本Policyを過去PilotのReferenceとして保持すること、Suspended中にRunnerを起動する場合も本Policyのcontrolsを弱めずに適用することを明記した。**SEC-01〜SEC-27、Trust Model、Mandatory Controls、Runner環境、Operator Rules、Residual Risksの内容は変更していない。弱めた項目は無い**
