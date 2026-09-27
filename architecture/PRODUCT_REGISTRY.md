@@ -6,6 +6,8 @@ Product詳細仕様はここには記載しません。
 
 最終棚卸し: 2026-09-17
 
+最終更新: 2026-09-27（OTOMO VOX / OTOMO LOOPの責務整合。全Productの再棚卸しではない）
+
 ## Status Guide
 
 - `Active`: Productとして継続運用中
@@ -63,22 +65,26 @@ NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-te
 - Product ID: `otomo-vox`
 - Repository: `t0t005081114-hue/otomo-vox`
 - Status: Active Development
-- Type: AI PR / Content Transformation Product
+- Type: AI PR / Content Transformation & Publication Execution Product
 - Responsibility:
   - AI広報
-  - Source contentを媒体別の発信内容へ変換する
-  - 発信Packageのための公開投稿収集・構造分析・Pattern候補化を行う
+  - Source content / Content Intentを媒体別の発信内容（Platform Rendition）へ変換する
+  - Human承認を強制した上で、スケジューリングと公式API経由の配信を実行する
+  - 配信の運用状態（Publication / attempt / result / error）を管理する
+  - 発信Packageのための公開投稿収集・構造分析・Pattern候補化の仕組み（Package Research）を持つ
+  - 何を・なぜ・誰へ・どのチャネルで発信するか等の戦略判断と、Package Research結果の戦略的解釈はSHIVAが所有する（`architecture/LEAD_AGENTS.md` §6）。VOXはその実行の仕組みである
 - Product Specification Owner: `otomo-vox` Repository
-- Current Development State:
-  - Phase 0 `Package Research Feasibility Test` が進行中
-  - 現在の実装・Harness・requirementsは `phase-0/package-research-feasibility` branchに存在
-  - 2026-09-17棚卸し時点で同branchは`main`より3 commits ahead。`main`はInitial commitのみ
+- Current Development State（2026-09-27）:
+  - Phase 0 `Package Research Feasibility Test` 完了（PR #1で`main`へmerge）
+  - PH-01 Architecture Rebaseline 完了（PR #2でarchitectureを、PR #3でCompletion Recordを`main`へmerge）。SHIVA / VOX / LOOPの責務分担（2026-09-26 Human Decision）のもとで、VOXを配信実行Productとして再定義した
+  - PH-02は未開始。最初の配信Platformは未決定
 - OTOMO CORE Adoption:
-  - Phase 0 branchの `CLAUDE.md` がOTOMO COREを上位共通基盤として明示
+  - `main` の `CLAUDE.md` がOTOMO COREを上位共通基盤として明示
   - standard local sibling checkoutでCORE shared rulesを直接参照
   - Product固有Ruleは `harness/PRODUCT_RULES.md` が所有
   - Product requirements / data boundary / validation / Decision-Failure historyは `otomo-vox` が所有
   - Registry上のPlanned表記が実態と不一致だったため、2026-09-17のHuman指示による棚卸しでActive Developmentへ更新
+  - 2026-09-26のHuman Decision（SHIVA / VOX / LOOPの責務分担。記録: `otomo-vox` `docs/ARCHITECTURE.md` §1.1）に基づき、2026-09-27にType / Responsibility / Current Development Stateと、OTOMO LOOPのResponsibilityを整合した
 
 ### OTOMO COMES
 
@@ -110,10 +116,12 @@ NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-te
 - Status: Planned
 - Repository: Not fixed
 - Responsibility:
-  - SNS自動運用
-  - 市場反応取得
+  - 市場反応の観測・取得（配信の実行はOTOMO VOXが所有する）
+  - Performanceの集約・比較
   - 市場検証
-  - OTOMO LABへのフィードバック
+  - Learning / insight候補化
+  - SHIVA / OTOMO Product（OTOMO LAB等）へのフィードバック
+- 詳細な計測・収集設計は未決定（Human Decision未了）であり、本Registryでは定めない
 
 2026-09-17棚卸し時点で、`t0t005081114-hue` 配下に `otomo-loop` Repositoryは確認できない。
 

@@ -20,12 +20,13 @@ OTOMOの活動が増えるほど、Humanへの窓口が分散し、判断待ち�
 
 ### Human Accepted Decisions
 
-次の各節は、2026-09-20のHuman Accepted Decisionに基づく。Agentが独断で再解釈・緩和しない。
+次の各節は、2026-09-20のHuman Accepted Decision（日付を併記した行はその日付のHuman Accepted Decision）に基づく。Agentが独断で再解釈・緩和しない。
 
 | 節 | Accepted Decision |
 |---|---|
 | §4 Baseline / Source of Truth | 「既存」はSOTから現在値を一意に確認できる場合のみ有効。確認できない場合はfail closed |
 | §6.4 / §6.5 SHIVA実行境界 | SHIVA単独実行はallowlistに限定する。無制限のcatch-allを置かない |
+| §6.4.1 SHIVA / Product実行境界（2026-09-27） | SHIVAの自律実行は、Product固有のapproval / security / authentication / 不可逆な外部副作用の境界を上書きしない。OTOMO VOXの現在のMode Aでは、Publicationごとに外部provider呼び出し前のHuman承認を要する |
 | §12 Cost Rule | 20%は累計固定費比率に対する閾値。欠損・未確定データをfail closedで扱う |
 | §14 Transition Rule | Lead Repository作成前に、Durable Historyを要する自律実行を開始しない |
 | §16 Future Local Layout | 将来のfolder / Workspace構造はnon-normative |
@@ -194,7 +195,7 @@ allowlist:
 - Content theme変更
 - Sales copy変更
 - CTA文言変更
-- 既存承認済みチャネルへのContent投稿
+- 既存承認済みチャネルへのContent投稿（投稿の判断・実行要求を含む。実際の外部配信をProductが実行する場合は §6.4.1 に従う）
 - 既存承認済みSales導線内でのmessage変更
 - 既存Consultation導線の可逆な改善
 - A/B test等、既存環境内で元に戻せるExperiment
@@ -212,6 +213,16 @@ Humanが新しい自律実行行為を承認した場合でも、**正式SOTへ�
 
 Agentが類似性・同等性・可逆性を自分で判断してallowlistを拡張しない。本節に一般条項・catch-allを置かない。allowlistの変更は §20 Lead Governance Mutation に従いHuman承認を必要とする。
 
+#### 6.4.1 Product Execution Boundary
+
+2026-09-27のHuman Accepted Decision（§20に基づくHuman承認済みの変更）。
+
+- §6.4のallowlistは、既存権限内でのSHIVA側の自律実行を認めるものである。Product固有のapproval / security / authentication / 不可逆な外部副作用の制御を上書き・迂回する権限を与えない
+- SHIVAは、§6.4の条件を満たす範囲（既存承認済みのチャネル・アカウント・playbook内）で、Content作成、投稿意図の判断、権限内での既存承認済みチャネルの選択、Publicationの準備・実行要求、Productの実行フローの開始を自律的に行える
+- 外部副作用（外部配信等）をProductが実行する場合、その実行境界は当該Productの正式Source of Truthが定める（§4.2、§19）
+- OTOMO VOXの現在のMode Aでは、すべてのPublicationに、外部provider呼び出し前のHuman承認を要する。SHIVAはこの承認を迂回しない
+- PublicationごとのHuman承認の撤廃・緩和、またはProduct制御を迂回する権限の付与には、別のHuman Decisionと、Product正式SOTおよび本ファイルの整合した更新を必要とする。現在のallowlistから将来の自律配信を推論しない
+
 ### 6.5 SHIVA単独では実施しないもの
 
 次はSHIVAの単独実行範囲外である。
@@ -227,7 +238,8 @@ Agentが類似性・同等性・可逆性を自分で判断してallowlistを拡
 - 新しい個人情報保存
 - 新しい個人情報送信
 - Security / Authentication変更
-- 不可逆な外部副作用
+- 不可逆な外部副作用の直接実行（Productの実行フローを通じた実行要求は §6.4.1 に従い、Product側の境界を経る）
+- Product固有のapproval / security / authentication境界の迂回（§6.4.1）
 - Product仕様変更
 - ターゲット変更
 - 実価格変更
