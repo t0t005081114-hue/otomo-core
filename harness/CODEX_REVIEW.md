@@ -83,7 +83,7 @@ Codexは複数のinstruction sourceを読みうる。そのreviewでCodexが実�
 instruction sourceの導線（何を読むか）はauthorityを生まない。導線であることを理由に、instruction sourceの記述の優先順位は上がりも下がりもしない。Rule Precedenceは次の既存定義のままである。
 
 - `architecture/RESPONSIBILITY_BOUNDARIES.md` §5
-- Lead repositoryでは加えて `architecture/LEAD_AGENTS.md` §19
+- 業務記録repositoryの移行境界は `architecture/WORKING_MODEL.md` §4
 
 instruction sourceがrepository固有のRuleを含む場合（例: OTOMO LAB `AGENTS.md`）、そのRuleはProduct固有Rule等として上記Precedenceの中で扱う。矛盾を見つけたReviewerは、矛盾する記述がPrecedence上のどれに当たるかを示して報告し、独断で解消しない。Product要件とCORE共通Ruleの衝突はHumanへ戻す（同 §5、`harness/DEVELOPMENT_STANDARDS.md` §8）。
 
@@ -97,7 +97,7 @@ native reviewでも、Reviewerは次に従う。定義は参照先が正本で�
 | Review Handoff・PR description・依頼文はScopeの上限ではない。diffとSource of Truthを自分で確認する | `harness/DEVELOPMENT_STANDARDS.md` §5 Review Handoff |
 | 最新のfix commitだけでなく、logical change / PR change-unit全体をreviewする | `harness/PHASE_WORKFLOW.md` §5 Re-review Scope |
 | 未決定の仕様・TBDを推測で確定しない。findingまたは確認事項として報告する | `harness/DEVELOPMENT_STANDARDS.md` §3 |
-| 責務境界を確認する | `architecture/RESPONSIBILITY_BOUNDARIES.md`、`architecture/LEAD_AGENTS.md` |
+| 責務境界を確認する | `architecture/RESPONSIBILITY_BOUNDARIES.md`、`architecture/WORKING_MODEL.md` |
 | re-reviewではprevious findingをResolved / Open / Not applicableで追跡する | `harness/PHASE_WORKFLOW.md` §5 Finding Trace |
 | Findingの定義・severity（blocking / advisory）、Review Assurance Level | `harness/DEVELOPMENT_STANDARDS.md` §5 Finding / blocking / advisory |
 | review結果の保存 | `harness/DEVELOPMENT_STANDARDS.md` §4 Durable History、§5 Codex Review Durable History、Evidence Integrity |
@@ -149,13 +149,13 @@ native reviewは、review対象checkout（head）のinstruction sourceを読み�
 
 user global instruction（例: `~/.codex/AGENTS.md`）は、repositoryで完全には管理できない。Residual Riskとして扱い、repository側から上書き・管理しない。
 
-## 7. Lead Repository
+## 7. 業務記録Repository
 
-Lead運用Repository（`otomo-marketing` / `otomo-ops`）はProductではない（`architecture/LEAD_AGENTS.md` §14）。
+`otomo-marketing` / `otomo-ops` の移行と業務記録の扱いは `architecture/WORKING_MODEL.md` §4に従う。
 
-- 日常業務（Weekly Report、Experiment log等）のreviewへ、BRAHMA用Review Assurance Levelを機械的に適用しない（同 §18）。VISHNUはConsistency Check / factual verification、SHIVAはExperiment Review / PDCAが基準となる
-- Software / Tool / Automationの制作、およびProduct RepositoryやCORE Harnessへ入る変更は、同 §18 のとおりBRAHMAの開発ルールとRisk Classificationに従う
-- Lead文書がProduct固有の事実（Phase状態、review状態、KPI等）を引用する場合、その事実の正本は対象ProductのSource of Truthである（`architecture/RESPONSIBILITY_BOUNDARIES.md` §3、KPIは `architecture/LEAD_AGENTS.md` §8.3）。Reviewerは該当Product SOTをreview contextとして確認する
+- 日常報告は事実・整合性、施策記録は結果と学びを確認する。開発用Review Assurance Levelを日常業務へ機械的に適用しない。
+- Software / Tool / Automationの制作とCORE Harness変更は、開発標準とRisk Classificationに従う。
+- Product固有のPhase状態、review状態、KPI等を引用する場合は対象Productの正本を確認する。
 
 ## 8. Non-Goals
 

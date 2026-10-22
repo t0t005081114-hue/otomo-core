@@ -42,11 +42,11 @@ Remote Review adopters: describe the file-backed required documents in a form th
    - `harness/DEVELOPMENT_STANDARDS.md`
    - `harness/PHASE_WORKFLOW.md`
    - `architecture/RESPONSIBILITY_BOUNDARIES.md`
-   - <Lead repositories: `architecture/LEAD_AGENTS.md`>
+   - <Business record repositories: `architecture/WORKING_MODEL.md`>
 
 If the approved CORE baseline cannot be read, resolved, or confirmed, follow `harness/DEVELOPMENT_STANDARDS.md` §7 Approved CORE Baseline (documented fallback only; otherwise fail closed). Documented fallback for this repository: <name it, or delete this line if none exists>.
 
-Rule precedence is defined by OTOMO CORE (`architecture/RESPONSIBILITY_BOUNDARIES.md` §5; Lead repositories also `architecture/LEAD_AGENTS.md` §19). Listing a document here gives it no extra authority. Conflicts are reported with their precedence level, not resolved by the reviewer (`harness/CODEX_REVIEW.md` §3.3).
+Rule precedence is defined by OTOMO CORE (`architecture/RESPONSIBILITY_BOUNDARIES.md` §5; Business record repositories also `architecture/WORKING_MODEL.md` §4). Listing a document here gives it no extra authority. Conflicts are reported with their precedence level, not resolved by the reviewer (`harness/CODEX_REVIEW.md` §3.3).
 
 ## Review Routing
 
@@ -56,7 +56,7 @@ Review rules are owned by the OTOMO CORE Harness (read from the approved CORE ba
 - Review lifecycle — review unit, remediation, re-review scope, Finding Trace, New Finding Stop Rule, completion: `harness/PHASE_WORKFLOW.md` (§4–§6)
 - Native Codex mechanics — effective instruction chain, changed-path instruction applicability, instruction-source changes and trusted baseline, self-reference residual risk: `harness/CODEX_REVIEW.md` (§3, §6.1)
 - Reviewer conduct, topic by topic, with the owning section of each rule: `harness/CODEX_REVIEW.md` §4
-- Responsibility boundaries and precedence: `architecture/RESPONSIBILITY_BOUNDARIES.md` <Lead repositories: and `architecture/LEAD_AGENTS.md`; Lead review model: `harness/CODEX_REVIEW.md` §7>
+- Responsibility boundaries and precedence: `architecture/RESPONSIBILITY_BOUNDARIES.md` <Business record repositories: and `architecture/WORKING_MODEL.md`; Business record review model: `harness/CODEX_REVIEW.md` §7>
 - If the diff adds, modifies, or removes a repository-local Codex instruction source (including this file), apply `harness/CODEX_REVIEW.md` §3.2 and §6.1 before forming a verdict.
 - Never output secrets, credentials, tokens, personal data, or environment variable values (`harness/DEVELOPMENT_STANDARDS.md` §5 Evidence Integrity).
 

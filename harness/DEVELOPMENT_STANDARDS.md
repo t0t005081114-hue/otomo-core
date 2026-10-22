@@ -16,45 +16,26 @@ Product固有仕様を追加・変更するものではない。
 - Knowledge昇格承認
 - 重大なReview Level判断（Forced Level 2条件に該当する変更の引き下げ）
 
-### ChatGPT
+### Claude Code — 実装
 
-- 壁打ち
-- 要件整理
-- 仕様監査
-- 全体設計
-- 独立レビュー
-- Product横断監査
-- CORE昇格候補評価
-- Risk classification監査
-- 独立レビューScope整理
+- 実装・修正・Test・Refactoring・指定されたPhase作業
+- self-review・Validation・Acceptance確認
+- Review Assurance Level候補とRisk Driversの申告・Review Handoff作成
+- 指摘修正とProduct側の実装・進捗・検証記録の更新
 
-### Claude Code
+### Codex — 独立レビュー・開発進捗管理
 
-- 実装
-- 修正
-- Test
-- Refactoring
-- 指定されたPhase作業
-- self-review
-- Review Assurance Level候補とRisk Driversの申告
-- Review Handoff作成
+- 独立コードレビュー・回帰確認・実装検証・設計監査
+- Targeted Review / Full Reviewと、申告されたReview Level・Scopeの妥当性判断
+- 仕様・Issue・PR・commit・検証結果に基づくPhase状態、完了条件、blocking、残件の確認
+- 次の作業・実装担当への引き継ぎ内容・人間が判断すべき事項の整理
+- Product横断の進捗集約・事実確認・報告
 
-### Codex
+進捗管理は仕様・優先順位・Scopeの独断変更を含まない。独立レビュー担当はrepository fileを変更せず、実装修正と記録のfile変更はClaude Codeへ引き継ぐ（§5 Codex Review Durable History）。
+要件整理・壁打ち・全体設計は必要に応じて支援するが、別のLead層は設けない。
+作業の流れと進捗報告は `architecture/WORKING_MODEL.md` を参照する。
 
-主な利用候補:
-
-- 独立コードレビュー
-- 回帰確認
-- 実装検証
-- 別視点からの設計・コード監査
-- Targeted Review / Full Review
-- 申告されたReview Level・Review Scopeの妥当性判断
-
-役割は固定された製品依存仕様ではなく、必要に応じて更新できる。
-
-重要原則: 実装担当と独立レビュー担当を可能な限り分離する。
-
-実装担当は、自分の変更のReview Assurance Levelを単独で引き下げられない（§5 Level Assignment Authority）。
+重要原則: 実装担当と独立レビュー担当を可能な限り分離する。実装担当は自分の変更のReview Assurance Levelを単独で引き下げられない（§5）。
 
 ## 2. Before Implementation
 
