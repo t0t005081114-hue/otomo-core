@@ -46,6 +46,8 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 
 ### Harness
 
+- `harness/OPERATING_GUARDRAILS.md`: Lead名から切り離した業務の承認・費用・記録ルール
+
 - `harness/DEVELOPMENT_STANDARDS.md`: 全Product共通の開発標準
 - `harness/PHASE_WORKFLOW.md`: Phase単位の実装・検証・レビュー・完了手順
 - `harness/CODEX_REVIEW.md`: native Codex review（`/review` / `/codex:review`）を `AGENTS.md` 経由でrepository Source of TruthとCORE Harnessへ接続するReview Entry Point。**Native Codex ReviewがIndependent Reviewの標準entrypoint**（2026-09-25 Human Decision）

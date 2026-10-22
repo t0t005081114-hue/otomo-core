@@ -25,6 +25,7 @@ Codexは対象Productの仕様、Phase記録、Issue、PR、commit、テスト�
 
 人間が仕様・優先順位・Scope・価格・予算・新Product・重要な外部操作・最終承認を判断する。
 Lead廃止を理由にAIへ新しい営業・投稿・支出権限を与えない。確認できない権限や予算を推測しない。
+既存の投稿allowlist・費用20%基準・経営データ・週次報告の安全境界は `harness/OPERATING_GUARDRAILS.md` に維持する。
 Product固有の承認・安全性・認証・不可逆操作の制御を維持する。VOXの外部配信承認もProductの正本に従う。
 ルールの優先順位は `RESPONSIBILITY_BOUNDARIES.md` §5に従う。
 
