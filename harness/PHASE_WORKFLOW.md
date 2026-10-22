@@ -1,5 +1,7 @@
 # OTOMO Phase Workflow
 
+作業分担: Claude Codeが実装・修正・検証、Codexが独立レビュー・開発進捗管理、人間が重要判断を担当する。正本は `harness/DEVELOPMENT_STANDARDS.md` §1、進捗報告は `architecture/WORKING_MODEL.md` §3。
+
 ## 1. Before Phase
 
 Phase開始前:

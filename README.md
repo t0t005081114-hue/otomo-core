@@ -42,7 +42,7 @@ Obsidianは、Product横断で再利用する知識・学び・一般化され�
 
 - `architecture/PRODUCT_REGISTRY.md`: OTOMO Product一覧と現在の位置づけ
 - `architecture/RESPONSIBILITY_BOUNDARIES.md`: OTOMO COREと各Productの責務境界
-- `architecture/LEAD_AGENTS.md`: HumanとOTOMO各領域の間に置くLead Agent（SHIVA / BRAHMA / VISHNU）の責務・権限・境界（Trinity v1）
+- `architecture/WORKING_MODEL.md`: Claude Code（実装）/ Codex（独立レビュー・開発進捗管理）/ Human（重要判断）の作業分担
 
 ### Harness
 

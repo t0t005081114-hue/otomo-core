@@ -6,6 +6,8 @@ Product詳細仕様はここには記載しません。
 
 最終棚卸し: 2026-09-17
 
+2026-10-23: 3Lead廃止に伴う現行の戦略判断・フィードバック先のみ更新。以下の開発状態・Adoption状態は再棚卸ししていない。過去の日付にある旧名称は当時の判断記録である。
+
 最終更新: 2026-09-27（OTOMO VOX / OTOMO LOOPの責務整合。全Productの再棚卸しではない）
 
 ## Status Guide
@@ -72,7 +74,7 @@ NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-te
   - Human承認を強制した上で、スケジューリングと公式API経由の配信を実行する
   - 配信の運用状態（Publication / attempt / result / error）を管理する
   - 発信Packageのための公開投稿収集・構造分析・Pattern候補化の仕組み（Package Research）を持つ
-  - 何を・なぜ・誰へ・どのチャネルで発信するか等の戦略判断と、Package Research結果の戦略的解釈はSHIVAが所有する（`architecture/LEAD_AGENTS.md` §6）。VOXはその実行の仕組みである
+  - 何を・なぜ・誰へ・どのチャネルで発信するか等の戦略判断と、Package Research結果の戦略的解釈は人間が確定し、AIが整理・提案を支援する（`architecture/WORKING_MODEL.md` §4）。VOXはその実行の仕組みである
 - Product Specification Owner: `otomo-vox` Repository
 - Current Development State（2026-09-27）:
   - Phase 0 `Package Research Feasibility Test` 完了（PR #1で`main`へmerge）
@@ -120,7 +122,7 @@ NOTE: Product正式名称はOTOMO塾だが、現時点のRepository名は `ai-te
   - Performanceの集約・比較
   - 市場検証
   - Learning / insight候補化
-  - SHIVA / OTOMO Product（OTOMO LAB等）へのフィードバック
+  - 人間 / OTOMO Product（OTOMO LAB等）へのフィードバック
 - 詳細な計測・収集設計は未決定（Human Decision未了）であり、本Registryでは定めない
 
 2026-09-17棚卸し時点で、`t0t005081114-hue` 配下に `otomo-loop` Repositoryは確認できない。
